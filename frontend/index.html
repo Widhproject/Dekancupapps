@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Dekan Cup FST 2026 — Live Score</title>
+<meta name="description" content="Live score, jadwal pertandingan, dan profil HIMA — Dekan Cup Fakultas Sains dan Teknologi 2026" />
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="assets/logos/icon-512.png" type="image/png" />
+<link rel="apple-touch-icon" href="assets/logos/apple-touch-icon.png" />
+<link rel="stylesheet" href="css/style.css" />
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+</head>
+<body>
+
+<header class="navbar">
+  <div class="navbar-inner">
+    <div class="brand">
+      <div class="brand-logos">
+        <img src="assets/logos/dekancup-emblem.png" alt="Logo Dekan Cup FST 2026" />
+      </div>
+      <div class="brand-text">
+        <div class="display">Dekan Cup <span style="color:var(--forest)">FST</span></div>
+        <div class="eyebrow">Live Score · 2026</div>
+      </div>
+    </div>
+
+    <nav class="nav-links" id="nav-links">
+      <a href="#/jadwal" data-route="/jadwal">Jadwal</a>
+      <a href="#/hima" data-route="/hima">HIMA</a>
+      <a href="#/daftar" data-route="/daftar">Registrasi Peserta</a>
+      <a href="#/bagan" data-route="/bagan">Bagan</a>
+      <a href="#/riwayat" data-route="/riwayat">Riwayat</a>
+      <span id="admin-nav-slot"></span>
+    </nav>
+
+    <button class="nav-toggle" id="nav-toggle" aria-label="Buka menu" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+
+    <div class="org-logos">
+      <div class="divider"></div>
+      <img src="assets/logos/bem.png" alt="Logo BEM FST" title="BEM FST" />
+      <img src="assets/logos/kabinet.png" alt="Logo Kabinet Selasar Karya" title="Kabinet Selasar Karya 2026" />
+      <img src="assets/logos/dekancup-emblem.png" alt="Logo Dekan Cup FST 2026" title="Dekan Cup FST 2026" />
+    </div>
+  </div>
+</header>
+
+<main id="app"></main>
+
+<div class="toast-container" id="toast-container"></div>
+
+<footer class="footer">
+  <div class="flourish">✦</div>
+  Dekan Cup FST 2026
+</footer>
+
+<script src="js/app.js"></script>
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').catch((err) => {
+        console.warn('Gagal mendaftarkan service worker:', err);
+      });
+    });
+  }
+</script>
+</body>
+</html>

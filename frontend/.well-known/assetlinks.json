@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "app.railway.up.dekancupfst2026.twa",
+        "sha256_cert_fingerprints": ["12:09:F5:3C:C4:CE:6A:07:D2:CA:37:DE:78:36:19:73:6E:D1:9F:73:9D:31:89:B3:7E:09:25:0C:A5:C1:04:51"]
+      }
+    }]
