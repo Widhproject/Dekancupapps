@@ -291,13 +291,27 @@ a.file-link:hover{
 .athlete .name{ font-size:.85rem; font-weight:600; margin-top:6px; }
 .athlete .role{ font-size:.72rem; color:#6b5c48; }
 
-.roster-by-sport{ margin-top:14px; display:grid; gap:18px; }
+.roster-by-sport{ margin-top:14px; display:grid; gap:10px; }
+.roster-group{
+  border:1px solid var(--line); border-radius:10px; background:rgba(0,0,0,.015);
+  overflow:hidden;
+}
+.roster-group[open]{ background:rgba(0,0,0,.02); }
 .roster-group-title{
   font-family:'Special Elite', monospace; font-size:.78rem; letter-spacing:.04em;
-  text-transform:uppercase; color:var(--forest); margin-bottom:6px;
+  text-transform:uppercase; color:var(--forest);
+  padding:12px 14px; cursor:pointer; user-select:none;
+  display:flex; align-items:center; gap:8px;
+  list-style:none;
 }
-.roster-group-title .roster-count{ text-transform:none; color:#6b5c48; font-weight:400; letter-spacing:0; }
-.roster-table{ width:100%; border-collapse:collapse; font-size:.85rem; }
+.roster-group-title::-webkit-details-marker{ display:none; }
+.roster-caret{
+  display:inline-block; font-size:.7rem; color:#6b5c48;
+  transition:transform .15s ease;
+}
+.roster-group[open] .roster-caret{ transform:rotate(90deg); }
+.roster-group-title .roster-count{ text-transform:none; color:#6b5c48; font-weight:400; letter-spacing:0; margin-left:auto; }
+.roster-table{ width:100%; border-collapse:collapse; font-size:.85rem; border-top:1px solid var(--line); }
 .roster-table th, .roster-table td{ text-align:left; padding:6px 10px; border-bottom:1px solid var(--line); }
 .roster-table th{ font-size:.7rem; text-transform:uppercase; letter-spacing:.04em; color:#6b5c48; font-weight:600; }
 .roster-table tbody tr:nth-child(odd){ background:rgba(0,0,0,.02); }

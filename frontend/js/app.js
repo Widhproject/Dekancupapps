@@ -465,9 +465,13 @@ route('/hima/:id', async ({ params }) => {
         ${h.roster_by_sport?.length ? `
           <div class="section-head"><h2 style="font-size:1.1rem">Profil Atlet</h2></div>
           <div class="roster-by-sport">
-            ${h.roster_by_sport.map((group) => `
-              <div class="roster-group">
-                <div class="roster-group-title">${group.sport_type} <span class="roster-count">(${group.players.length} peserta)</span></div>
+            ${h.roster_by_sport.map((group, i) => `
+              <details class="roster-group" ${i === 0 ? 'open' : ''}>
+                <summary class="roster-group-title">
+                  <span class="roster-caret">▸</span>
+                  ${group.sport_type}
+                  <span class="roster-count">(${group.players.length} peserta)</span>
+                </summary>
                 <table class="roster-table">
                   <thead><tr><th>Nama</th><th>NIM</th></tr></thead>
                   <tbody>
@@ -475,7 +479,7 @@ route('/hima/:id', async ({ params }) => {
                       <tr><td>${p.name}</td><td>${p.nim || '-'}</td></tr>`).join('')}
                   </tbody>
                 </table>
-              </div>`).join('')}
+              </details>`).join('')}
           </div>` : ''}
       </div>
     </div>`;
