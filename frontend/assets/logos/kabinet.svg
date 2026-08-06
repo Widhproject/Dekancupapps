@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <circle cx="50" cy="50" r="47" fill="#F6EFDF" stroke="#B8860B" stroke-width="3"/>
+  <path d="M50 15 L58 40 L85 40 L63 55 L71 80 L50 65 L29 80 L37 55 L15 40 L42 40 Z" fill="none" stroke="#B8860B" stroke-width="2"/>
+  <text x="50" y="60" font-family="Georgia, serif" font-size="16" font-weight="700" fill="#B8860B" text-anchor="middle">KBN</text>
+</svg>

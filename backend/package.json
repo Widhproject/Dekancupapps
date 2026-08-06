@@ -1,0 +1,24 @@
+{
+  "name": "dekancup-livescore-backend",
+  "version": "1.0.0",
+  "description": "Backend API + real-time live score untuk Dekan Cup FST 2026",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "seed": "node src/db.js --seed-only"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.1",
+    "socket.io": "^4.7.5",
+    "uuid": "^9.0.1",
+    "web-push": "^3.6.7",
+    "xlsx": "^0.18.5"
+  }
+}

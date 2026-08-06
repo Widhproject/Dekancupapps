@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 90" width="220" height="90">
+  <defs>
+    <style>
+      .word { font-family: 'Playfair Display', Georgia, serif; }
+    </style>
+  </defs>
+  <!-- feather flourish accent -->
+  <path d="M150 12 C165 6 178 10 185 18 C176 16 168 18 162 24 C170 22 178 24 183 30 C172 28 164 32 160 38" 
+        fill="none" stroke="#7A2A28" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="186" cy="16" r="2.4" fill="#33473A"/>
+
+  <text x="4" y="34" class="word" font-size="26" font-weight="700" font-style="italic" fill="#7A2A28">Dekan</text>
+  <text x="4" y="60" class="word" font-size="26" font-weight="700" font-style="italic" fill="#33473A">Cup</text>
+  <text x="4" y="78" font-family="'Special Elite', monospace" font-size="10" letter-spacing="3" fill="#3B2E22">FST · 2026</text>
+</svg>

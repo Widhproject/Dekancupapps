@@ -1,0 +1,14 @@
+{
+  "name": "Dekan Cup FST 2026",
+  "short_name": "Dekan Cup FST 2026",
+  "description": "Live score, jadwal, dan profil HIMA - Dekan Cup FST 2026",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#EDE4D0",
+  "theme_color": "#7A2A28",
+  "icons": [
+    { "src": "assets/logos/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/logos/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "assets/logos/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

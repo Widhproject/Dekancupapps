@@ -1,0 +1,10 @@
+{
+  "name": "dekancup-monorepo",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Root package.json supaya platform hosting (Railway/Render) mendeteksi Node.js sekaligus tetap menyertakan folder frontend/",
+  "scripts": {
+    "postinstall": "npm install --prefix backend",
+    "start": "npm start --prefix backend"
+  }
+}
