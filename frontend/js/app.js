@@ -76,6 +76,23 @@ function fmtDate(str) {
 
 const STATUS_LABEL = { scheduled: 'Belum Mulai', live: 'Live', finished: 'Selesai' };
 const SPORT_TYPES = ['Futsal', 'Basket', 'Voli', 'Badminton', 'E-Sport Mobile Legends'];
+
+// Ikon cabor: dulu pakai emoji (rendering-nya beda-beda tiap OS/browser dan
+// suka pecah/kotak di beberapa perangkat), sekarang diganti ikon SVG garis
+// (monoline) buatan sendiri supaya tampilannya konsisten di semua perangkat
+// dan senada dengan tema situs (pakai currentColor, jadi otomatis ikut warna
+// teks di tempat dia dipasang — lihat .sport-icon-svg di css/style.css).
+const SPORT_ICONS = {
+  futsal: '<svg class="sport-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.6l3.4 2.5-1.3 4h-4.2l-1.3-4z"/><path d="M12 7.6V4.3M15.4 10.1l3-1.9M8.6 10.1l-3-1.9M10.1 14.1l-2.3 3.2M13.9 14.1l2.3 3.2"/></svg>',
+  basket: '<svg class="sport-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3v18M5.3 5.3c2.4 1.9 3.9 4.2 3.9 6.7s-1.5 4.8-3.9 6.7M18.7 5.3c-2.4 1.9-3.9 4.2-3.9 6.7s1.5 4.8 3.9 6.7"/></svg>',
+  voli: '<svg class="sport-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 3.2c2.9 2.2 4.3 5.4 4.3 8.8s-1.4 6.6-4.3 8.8M6.2 5.6c2.2 1.5 4.8 2.4 7.6 2.3M4.1 14.2c2.5 1.2 5.3 1.8 8.1 1.5M19.9 14.2c-1.7 1.1-3.6 1.7-5.7 1.8"/></svg>',
+  badminton: '<svg class="sport-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.8l4 7.4h-8z"/><path d="M8.3 10.2h7.4l1.8 8.4H6.5z"/><circle cx="12" cy="19.6" r="1.6"/></svg>',
+  esport: '<svg class="sport-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6.8 8.2h10.4a4 4 0 0 1 3.95 4.62l-.58 3.5a1.9 1.9 0 0 1-3.32 1L15 15h-6l-2.25 2.32a1.9 1.9 0 0 1-3.32-1l-.58-3.5A4 4 0 0 1 6.8 8.2z"/><path d="M8 11v3M6.5 12.5h3"/><circle cx="16.6" cy="11" r=".9" fill="currentColor" stroke="none"/><circle cx="18.6" cy="13" r=".9" fill="currentColor" stroke="none"/></svg>',
+  fotografi: '<svg class="sport-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8.6h3.3l1.4-2.1h6.6l1.4 2.1H20a1 1 0 0 1 1 1V18a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.6a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.6" r="3.3"/><circle cx="17.6" cy="10.9" r=".5" fill="currentColor" stroke="none"/></svg>',
+  catur: '<svg class="sport-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4.2h2v2.1h2V4.2h2v2.1h2V4.2h2v3.9l-1.5 2v7.1H8.5v-7.1l-1.5-2z"/><path d="M6 20h12"/><path d="M8.3 17.2h7.4"/></svg>',
+  band: '<svg class="sport-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5v10.3"/><path d="M9 5l8-2.2v10"/><circle cx="7" cy="17.2" r="2.2" fill="currentColor" stroke="none"/><circle cx="15" cy="14.8" r="2.2" fill="currentColor" stroke="none"/></svg>',
+  tari: '<svg class="sport-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4.6" r="1.8"/><path d="M12 7v4.8"/><path d="M12 8.2L7.2 11M12 8.2l4.6-1.6"/><path d="M12 11.8L8 19M12 11.8l4.8 5.7"/></svg>',
+};
 const EVENT_LABEL = {
   goal: '⚽ Gol', yellow_card: '🟨 Kartu Kuning', red_card: '🟥 Kartu Merah',
   substitution: '🔁 Pergantian Pemain', note: '📝 Catatan',
@@ -97,22 +114,22 @@ const EVENT_LABEL = {
 const SOP_URL = 'https://drive.google.com/drive/folders/1rzUK1Gxs2JtfK72k1TegGmPyJ_iUKVY3?usp=drive_link';
 
 const SPORT_CONFIG = {
-  Futsal: { categories: ['Putra', 'Putri'], minPlayers: 5, maxPlayers: 15, hasSquadStatus: true, icon: '⚽', templateUrl: 'https://docs.google.com/document/d/1q_EMgIg-XYeQ3FrrX78g7xNqVEVpRqIHQOdTlbgl81M/edit?tab=t.0', forceMajeureUrl: 'https://drive.google.com/file/d/1JB8LOxjcvxd4o5xZAn9nEUbHfCR0pZ24/view?pli=1' },
-  Basket: { categories: ['Putra', 'Putri'], minPlayers: 5, maxPlayers: 12, hasSquadStatus: true, icon: '🏀', templateUrl: 'https://docs.google.com/document/d/1q_EMgIg-XYeQ3FrrX78g7xNqVEVpRqIHQOdTlbgl81M/edit?tab=t.0', forceMajeureUrl: 'https://drive.google.com/file/d/1JB8LOxjcvxd4o5xZAn9nEUbHfCR0pZ24/view?pli=1' },
-  Voli: { categories: ['Putra', 'Putri'], minPlayers: 6, maxPlayers: 12, hasSquadStatus: true, icon: '🏐', templateUrl: 'https://docs.google.com/document/d/1q_EMgIg-XYeQ3FrrX78g7xNqVEVpRqIHQOdTlbgl81M/edit?tab=t.0', forceMajeureUrl: 'https://drive.google.com/file/d/1JB8LOxjcvxd4o5xZAn9nEUbHfCR0pZ24/view?pli=1' },
+  Futsal: { categories: ['Putra', 'Putri'], minPlayers: 5, maxPlayers: 15, hasSquadStatus: true, icon: SPORT_ICONS.futsal, templateUrl: 'https://docs.google.com/document/d/1q_EMgIg-XYeQ3FrrX78g7xNqVEVpRqIHQOdTlbgl81M/edit?tab=t.0', forceMajeureUrl: 'https://drive.google.com/file/d/1JB8LOxjcvxd4o5xZAn9nEUbHfCR0pZ24/view?pli=1' },
+  Basket: { categories: ['Putra', 'Putri'], minPlayers: 5, maxPlayers: 12, hasSquadStatus: true, icon: SPORT_ICONS.basket, templateUrl: 'https://docs.google.com/document/d/1q_EMgIg-XYeQ3FrrX78g7xNqVEVpRqIHQOdTlbgl81M/edit?tab=t.0', forceMajeureUrl: 'https://drive.google.com/file/d/1JB8LOxjcvxd4o5xZAn9nEUbHfCR0pZ24/view?pli=1' },
+  Voli: { categories: ['Putra', 'Putri'], minPlayers: 6, maxPlayers: 12, hasSquadStatus: true, icon: SPORT_ICONS.voli, templateUrl: 'https://docs.google.com/document/d/1q_EMgIg-XYeQ3FrrX78g7xNqVEVpRqIHQOdTlbgl81M/edit?tab=t.0', forceMajeureUrl: 'https://drive.google.com/file/d/1JB8LOxjcvxd4o5xZAn9nEUbHfCR0pZ24/view?pli=1' },
   Badminton: {
     categories: ['Ganda Putra', 'Ganda Putri', 'Campuran'],
-    minPlayers: 2, maxPlayers: 4, icon: '🏸',
+    minPlayers: 2, maxPlayers: 4, icon: SPORT_ICONS.badminton,
     templateUrl: 'https://docs.google.com/document/d/1q_EMgIg-XYeQ3FrrX78g7xNqVEVpRqIHQOdTlbgl81M/edit?tab=t.0', forceMajeureUrl: 'https://drive.google.com/file/d/1JB8LOxjcvxd4o5xZAn9nEUbHfCR0pZ24/view?pli=1',
   },
   'E-Sport Mobile Legends': {
     categories: ['Mobile Legends', 'FIFA'],
-    minPlayers: 1, maxPlayers: 7, hasSquadStatus: true, icon: '🎮',
+    minPlayers: 1, maxPlayers: 7, hasSquadStatus: true, icon: SPORT_ICONS.esport,
     categoryPlayers: { 'Mobile Legends': { min: 5, max: 7 }, 'FIFA': { min: 2, max: 4 } },
     templateUrl: 'https://docs.google.com/document/d/1q_EMgIg-XYeQ3FrrX78g7xNqVEVpRqIHQOdTlbgl81M/edit?tab=t.0', forceMajeureUrl: 'https://drive.google.com/file/d/1JB8LOxjcvxd4o5xZAn9nEUbHfCR0pZ24/view?pli=1',
   },
   Fotografi: {
-    categories: ['Fotografi'], minPlayers: 1, maxPlayers: 6, icon: '📷',
+    categories: ['Fotografi'], minPlayers: 1, maxPlayers: 6, icon: SPORT_ICONS.fotografi,
     templateUrl: 'https://docs.google.com/document/d/1q_EMgIg-XYeQ3FrrX78g7xNqVEVpRqIHQOdTlbgl81M/edit?tab=t.0', forceMajeureUrl: 'https://drive.google.com/file/d/1JB8LOxjcvxd4o5xZAn9nEUbHfCR0pZ24/view?pli=1',
     extraFields: [
       {
@@ -125,14 +142,14 @@ const SPORT_CONFIG = {
       },
     ],
   },
-  Catur: { categories: ['Catur'], minPlayers: 4, maxPlayers: 4, icon: '♟️', templateUrl: 'https://docs.google.com/document/d/1q_EMgIg-XYeQ3FrrX78g7xNqVEVpRqIHQOdTlbgl81M/edit?tab=t.0', forceMajeureUrl: 'https://drive.google.com/file/d/1JB8LOxjcvxd4o5xZAn9nEUbHfCR0pZ24/view?pli=1' },
+  Catur: { categories: ['Catur'], minPlayers: 4, maxPlayers: 4, icon: SPORT_ICONS.catur, templateUrl: 'https://docs.google.com/document/d/1q_EMgIg-XYeQ3FrrX78g7xNqVEVpRqIHQOdTlbgl81M/edit?tab=t.0', forceMajeureUrl: 'https://drive.google.com/file/d/1JB8LOxjcvxd4o5xZAn9nEUbHfCR0pZ24/view?pli=1' },
   'Band Competition': {
-    categories: ['Band Competition'], minPlayers: 3, maxPlayers: 10, icon: '🎸',
+    categories: ['Band Competition'], minPlayers: 3, maxPlayers: 10, icon: SPORT_ICONS.band,
     templateUrl: 'https://docs.google.com/document/d/1q_EMgIg-XYeQ3FrrX78g7xNqVEVpRqIHQOdTlbgl81M/edit?tab=t.0', forceMajeureUrl: 'https://drive.google.com/file/d/1JB8LOxjcvxd4o5xZAn9nEUbHfCR0pZ24/view?pli=1',
     extraFields: [{ id: 'nama_band', label: 'Nama Band', type: 'text', required: true }],
   },
   Tari: {
-    categories: ['Tari'], minPlayers: 3, maxPlayers: 15, icon: '💃',
+    categories: ['Tari'], minPlayers: 3, maxPlayers: 15, icon: SPORT_ICONS.tari,
     templateUrl: 'https://docs.google.com/document/d/1q_EMgIg-XYeQ3FrrX78g7xNqVEVpRqIHQOdTlbgl81M/edit?tab=t.0', forceMajeureUrl: 'https://drive.google.com/file/d/1JB8LOxjcvxd4o5xZAn9nEUbHfCR0pZ24/view?pli=1',
     extraFields: [{ id: 'nama_grup', label: 'Nama Grup Tari', type: 'text', required: true }],
   },

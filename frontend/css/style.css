@@ -673,7 +673,15 @@ body.scoreboard-mode::before{ display:none; }
   transition:border-color .15s ease, transform .15s ease;
 }
 .sport-pick-card:hover{ border-color:var(--maroon); transform:translateY(-3px); }
-.sport-pick-icon{ font-size:2rem; margin-bottom:8px; }
+.sport-pick-icon{ margin-bottom:8px; color:var(--maroon); }
+.sport-pick-icon .sport-icon-svg{ width:2.1rem; height:2.1rem; }
+
+/* Ikon cabor (svg, dulu emoji) — default ukurannya ngikutin font-size teks
+   di sekitarnya lewat unit "em", jadi otomatis pas dipasang di h2, label,
+   atau tempat lain tanpa perlu class tambahan tiap tempat. */
+.sport-icon-svg{ width:1em; height:1em; vertical-align:-0.15em; flex:none; }
+h2 .sport-icon-svg{ margin-right:.2em; }
+label .sport-icon-svg{ margin-right:.3em; }
 .sport-pick-name{ font-family:'Playfair Display', serif; font-weight:800; font-size:1.05rem; }
 .sport-pick-meta{ font-family:'Special Elite', monospace; font-size:.65rem; letter-spacing:.04em; text-transform:uppercase; color:var(--forest); margin-top:4px; }
 
