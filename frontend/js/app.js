@@ -541,13 +541,26 @@ route('/match/:id', async ({ params }) => {
             ${m.events.length ? m.events.map(eventItemHTML).join('') : '<div class="empty-state" style="padding:16px;">Belum ada catatan.</div>'}
           </div>
         </div>
+
+        <div class="photo-feed" style="margin-top:22px;">
+          <h3>📷 Dokumentasi</h3>
+          <div id="photo-gallery" class="photo-gallery">
+            ${(m.photos && m.photos.length) ? m.photos.map(photoItemHTML).join('') : '<div class="empty-state" style="padding:16px;">Belum ada foto pertandingan.</div>'}
+          </div>
+        </div>
       </div>
 
       ${admin ? adminControlsHTML(m) : ''}
+    </div>
+
+    <div class="lightbox" id="photo-lightbox" style="display:none;">
+      <img id="photo-lightbox-img" src="" alt="" />
+      <button class="lightbox-close" id="photo-lightbox-close">✕</button>
     </div>`;
 
   if (admin) bindAdminControls(m);
   if (admin && SPORTS_WITH_TIMER.includes(m.sport_type)) restartAdminTimerInterval(m);
+  bindPhotoLightbox();
 
   // ---- Socket.io: join room match ini, dengarkan update real-time ----
   if (currentSocket) { currentSocket.disconnect(); currentSocket = null; }
@@ -575,7 +588,38 @@ route('/match/:id', async ({ params }) => {
     document.querySelectorAll('.badge').forEach((b) => { if (b.closest('.scorecard')) b.outerHTML = statusBadge(status); });
     toast(`Status pertandingan: ${STATUS_LABEL[status]}`);
   });
+  currentSocket.on('photo_added', (photo) => {
+    const gallery = document.getElementById('photo-gallery');
+    if (!gallery) return;
+    if (gallery.querySelector('.empty-state')) gallery.innerHTML = '';
+    gallery.insertAdjacentHTML('beforeend', photoItemHTML(photo));
+    bindPhotoLightbox();
+    toast('Foto baru ditambahkan!');
+  });
 });
+
+function photoItemHTML(p) {
+  return `<div class="photo-thumb" data-photo-id="${p.id}">
+    <img src="${p.url}" alt="${p.caption || 'Dokumentasi pertandingan'}" loading="lazy" data-fullsrc="${p.url}" />
+    ${p.caption ? `<div class="photo-caption">${p.caption}</div>` : ''}
+  </div>`;
+}
+
+// Klik thumbnail foto → buka versi besar (lightbox sederhana, tanpa library eksternal).
+function bindPhotoLightbox() {
+  const lightbox = document.getElementById('photo-lightbox');
+  const lightboxImg = document.getElementById('photo-lightbox-img');
+  if (!lightbox || !lightboxImg) return;
+  document.querySelectorAll('#photo-gallery .photo-thumb img').forEach((img) => {
+    img.onclick = () => {
+      lightboxImg.src = img.dataset.fullsrc;
+      lightbox.style.display = 'flex';
+    };
+  });
+  const closeBtn = document.getElementById('photo-lightbox-close');
+  if (closeBtn) closeBtn.onclick = () => { lightbox.style.display = 'none'; lightboxImg.src = ''; };
+  lightbox.onclick = (e) => { if (e.target === lightbox) { lightbox.style.display = 'none'; lightboxImg.src = ''; } };
+}
 
 function eventItemHTML(ev) {
   const t = new Date(ev.created_at.replace(' ', 'T') + 'Z');
@@ -663,6 +707,22 @@ function adminControlsHTML(m) {
       ${m.status !== 'finished' ? `<button class="btn small primary" id="btn-finish">■ Selesaikan Pertandingan</button>` : ''}
     </div>
     ${m.status === 'live' ? `<div class="mc-meta" style="margin-top:10px;"><a href="#/layar" target="_blank">↗ Buka Layar Skor Besar</a></div>` : ''}
+
+    <div class="eyebrow" style="margin-top:14px;">Unggah Foto Dokumentasi</div>
+    <form id="photo-upload-form" class="photo-upload-form">
+      <input type="file" id="photo-file-input" accept="image/*" required />
+      <input type="text" id="photo-caption-input" placeholder="Keterangan foto (opsional)" maxlength="120" />
+      <button type="submit" class="btn small primary" id="photo-upload-btn">📤 Unggah Foto</button>
+    </form>
+    ${(m.photos && m.photos.length) ? `
+    <div class="admin-photo-manage">
+      ${m.photos.map((p) => `
+        <div class="admin-photo-row" data-photo-row="${p.id}">
+          <img src="${p.url}" alt="" />
+          <span class="mc-meta">${p.caption || '(tanpa keterangan)'}</span>
+          <button class="btn small ghost" data-delete-photo="${p.id}">🗑 Hapus</button>
+        </div>`).join('')}
+    </div>` : ''}
   </div>`;
 }
 
@@ -744,6 +804,49 @@ function bindAdminControls(m) {
       await api(`/matches/${m.id}/timer`, { method: 'PATCH', auth: true, body: { action: 'reset' } });
       router();
     } catch (err) { toast(err.message); }
+  });
+
+  // ---- Upload & hapus foto dokumentasi pertandingan ----
+  const photoForm = document.getElementById('photo-upload-form');
+  if (photoForm) photoForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fileInput = document.getElementById('photo-file-input');
+    const file = fileInput.files[0];
+    if (!file) { toast('Pilih file foto dulu'); return; }
+    if (file.size > 8 * 1024 * 1024) { toast('Ukuran foto maksimal 8 MB'); return; }
+
+    const btn = document.getElementById('photo-upload-btn');
+    btn.disabled = true;
+    btn.textContent = 'Mengunggah…';
+    try {
+      const fd = new FormData();
+      fd.append('photo', file);
+      fd.append('caption', document.getElementById('photo-caption-input').value.trim());
+      const res = await fetch(`${API_BASE}/matches/${m.id}/photos`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${getToken()}` },
+        body: fd,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || 'Gagal mengunggah foto');
+      toast('Foto berhasil diunggah');
+      router(); // muat ulang halaman supaya galeri & panel kelola foto ter-update
+    } catch (err) {
+      toast(err.message);
+      btn.disabled = false;
+      btn.textContent = '📤 Unggah Foto';
+    }
+  });
+
+  document.querySelectorAll('[data-delete-photo]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('Hapus foto ini?')) return;
+      try {
+        await api(`/matches/${m.id}/photos/${btn.dataset.deletePhoto}`, { method: 'DELETE', auth: true });
+        toast('Foto dihapus');
+        router();
+      } catch (err) { toast(err.message); }
+    });
   });
 }
 

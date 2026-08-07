@@ -349,6 +349,51 @@ a.file-link:hover{
 .event-item .icon{ font-size:1rem; }
 .event-item .time{ font-family:'Special Elite', monospace; font-size:.7rem; color:var(--forest); min-width:44px; }
 
+/* ============ FOTO DOKUMENTASI ============ */
+.photo-feed{ text-align:left; }
+.photo-feed h3{ font-size:1.05rem; margin-bottom:10px; }
+.photo-gallery{
+  display:grid; grid-template-columns:repeat(auto-fill, minmax(120px, 1fr)); gap:10px;
+}
+.photo-thumb{
+  border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--paper-light);
+}
+.photo-thumb img{
+  width:100%; aspect-ratio:1/1; object-fit:cover; display:block; cursor:pointer;
+  transition:transform .15s ease;
+}
+.photo-thumb img:hover{ transform:scale(1.03); }
+.photo-caption{
+  font-size:.72rem; color:#6b5c48; padding:6px 8px; border-top:1px solid var(--line);
+}
+
+.lightbox{
+  position:fixed; inset:0; background:rgba(20,16,10,.88); z-index:200;
+  align-items:center; justify-content:center; padding:24px;
+}
+.lightbox img{ max-width:min(92vw, 900px); max-height:88vh; border-radius:6px; box-shadow:0 10px 40px rgba(0,0,0,.5); }
+.lightbox-close{
+  position:absolute; top:18px; right:22px; background:none; border:none; color:#f3ead9;
+  font-size:1.6rem; cursor:pointer; line-height:1;
+}
+
+/* ---- Admin: unggah & kelola foto ---- */
+.photo-upload-form{
+  display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:8px;
+}
+.photo-upload-form input[type="file"]{ font-size:.8rem; max-width:180px; }
+.photo-upload-form input[type="text"]{
+  flex:1; min-width:140px; padding:8px 10px; border:1px solid var(--line); border-radius:6px;
+  background:var(--paper-light); font-size:.85rem;
+}
+.admin-photo-manage{ display:grid; gap:8px; margin-top:12px; }
+.admin-photo-row{
+  display:flex; align-items:center; gap:10px; padding:6px; border:1px solid var(--line); border-radius:8px;
+  background:var(--paper-light);
+}
+.admin-photo-row img{ width:44px; height:44px; object-fit:cover; border-radius:6px; flex-shrink:0; }
+.admin-photo-row .mc-meta{ flex:1; }
+
 /* ============ ADMIN ============ */
 .admin-panel{ display:grid; gap:16px; }
 .admin-score-box{
