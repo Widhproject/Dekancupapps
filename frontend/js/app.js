@@ -454,15 +454,16 @@ route('/home', async () => {
 
     <div class="wrap">
       <section class="team-section">
-        <div class="section-head"><div><h2>Team Management</h2></div></div>
-        <div class="team-grid">
-          ${HOME_MANAGEMENT_TEAM.map(teamCardHTML).join('')}
+        <div class="section-head"><div><h2>Team Management</h2><div class="exec-tag">Executive Committee</div></div></div>
+
+        <div class="exec-lead-grid">
+          <div class="exec-lead-row">
+            ${EXEC_LEAD.map(teamCardHTML).join('')}
+          </div>
         </div>
 
-        <div class="section-head"><div><h2>Executive Committee</h2></div></div>
-
-        <div class="team-grid team-grid--lead">
-          ${EXEC_LEAD.map(teamCardHTML).join('')}
+        <div class="team-grid">
+          ${HOME_MANAGEMENT_TEAM.map(teamCardHTML).join('')}
         </div>
 
         <h3 class="exec-subhead">Head of Conceptor</h3>

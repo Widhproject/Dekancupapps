@@ -420,14 +420,34 @@ a.file-link:hover{
 /* ---- Executive Committee: 1 foto puncak + dua grup di bawahnya ---- */
 .team-section .section-head{ margin-top:40px; }
 .team-section .section-head:first-of-type{ margin-top:0; }
+.exec-tag{
+  font-family:'Special Elite', monospace;
+  font-size:.72rem; letter-spacing:.08em; text-transform:uppercase;
+  color:var(--forest); margin-top:4px;
+}
 .exec-subhead{
   font-family:'Playfair Display'; font-weight:700; color:var(--maroon);
   text-align:center; font-size:1.05rem; margin:30px 0 16px;
 }
-.team-grid--lead{ margin-bottom:6px; }
-.team-grid--lead .team-card{ grid-column:2; }
+
+/* Frame "Ketua Pelaksana": ditaruh di atas Panji Wirawan & Baari (dua
+   card pertama di team-grid), lebar sama persis dengan 1 card biasa,
+   diposisikan center di area 2 kolom itu. Di mobile (grid jadi 2 kolom)
+   Panji & Baari otomatis jadi 1 baris penuh, jadi frame ini otomatis
+   center di tengah baris tersebut. */
+.exec-lead-grid{
+  display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:22px;
+  max-width:820px; margin:0 auto 22px;
+}
+.exec-lead-row{
+  grid-column:1 / span 2;
+  display:flex; justify-content:center;
+}
+.exec-lead-row .team-card{ width:calc((100% - 22px) / 2); }
 @media (max-width:700px){
-  .team-grid--lead .team-card{ grid-column:1 / -1; max-width:50%; margin:0 auto; }
+  .exec-lead-grid{ grid-template-columns:repeat(2, minmax(0,1fr)); gap:14px; }
+  .exec-lead-row{ grid-column:1 / -1; }
+  .exec-lead-row .team-card{ width:calc((100% - 14px) / 2); }
 }
 
 @media (max-width:700px){
