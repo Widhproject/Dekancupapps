@@ -248,7 +248,7 @@ const routes = {};
 function route(path, handler) { routes[path] = handler; }
 
 async function router() {
-  const hash = location.hash.slice(1) || '/jadwal';
+  const hash = location.hash.slice(1) || '/home';
   const [path, queryStr] = hash.split('?');
   const query = Object.fromEntries(new URLSearchParams(queryStr));
 
@@ -332,6 +332,96 @@ function heroHTML() {
     </div>
   </section>`;
 }
+
+// ============================================================
+// HALAMAN: HOME
+// ============================================================
+// Semua konten di bawah ini sengaja dipisah ke satu tempat supaya gampang
+// diganti tanpa perlu utak-atik HTML/logic-nya.
+//
+// - HOME_BANNERS.atas   : foto landscape paling atas (foto "Our Big Team").
+// - HOME_BANNERS.tengah : foto landscape kedua, sekarang ditaruh di antara
+//   Visi & Misi dan Team Management.
+//   Taruh file fotonya di frontend/assets/home/ lalu ganti `src` di sini.
+//   Selama file belum ada / gagal dimuat, otomatis muncul placeholder abu-abu
+//   dengan tulisan `label`.
+// - HOME_VISI_MISI     : visi & misi Dekan Cup (tanpa foto/nama ketua).
+// - HOME_MANAGEMENT_TEAM : 6 anggota tim manajemen (foto + nama + jabatan).
+//   Ganti `photo` dengan path foto masing-masing (mis. 'assets/home/kevin.jpg').
+//   Kalau foto belum ada / gagal dimuat, otomatis jatuh ke ikon placeholder.
+
+const HOME_BANNERS = {
+  atas: { src: 'assets/home/our-big-team.jpg', label: 'Our Big Team' },
+  tengah: { src: 'assets/dekancup-reference.png', label: 'Badan Pengurus Inti' },
+};
+
+const HOME_VISI_MISI = {
+  visi: 'Menjadikan Dekan Cup FST 2026 sebagai wadah unggulan untuk mengembangkan bakat dan kreativitas mahasiswa FST di bidang seni dan olahraga, yang tidak hanya berdaya saing tinggi tetapi juga merefleksikan kemegahan dan martabat Fakultas Sains dan Teknologi',
+  misi: [
+    'Membangun semangat kompetitif yang sehat, sportif, dan beretika luhur.',
+    'Mendorong keterlibatan aktif seluruh mahasiswa FST dalam kegiatan seni dan olahraga',
+    'Memperkuat persatuan antar Himpunan melalui kompetisi yang bermartabat.',
+    'Meningkatkan kualitas penyelenggaraan dengan peraturan yang tegas dan transparan.',
+  ],
+};
+
+const HOME_MANAGEMENT_TEAM = [
+  { name: 'Panji Wirawan', role: 'Koorlap Konseptor', photo: 'assets/home/team-1.jpg' },
+  { name: 'Baari Muhammad', role: 'Koorlap Teknis', photo: 'assets/home/team-2.jpg' },
+  { name: 'Halin Ifestarika. A', role: 'Sekretaris 1', photo: 'assets/home/team-3.jpg' },
+  { name: 'Riyanti Puspitaningrum', role: 'Sekretaris 2', photo: 'assets/home/team-4.jpg' },
+  { name: 'Nabilah Arifah', role: 'Bendahara 1', photo: 'assets/home/team-5.jpg' },
+  { name: 'Hanum Nisyaul. A', role: 'Bendahara 2', photo: 'assets/home/team-6.jpg' },
+];
+
+route('/home', async () => {
+  app.innerHTML = `
+    <div class="home-banner-frame">
+      <div class="home-banner">
+        <img src="${HOME_BANNERS.atas.src}" alt="${HOME_BANNERS.atas.label}"
+          onerror="this.closest('.home-banner').classList.add('is-placeholder'); this.remove();" />
+        <span class="home-banner-label">${HOME_BANNERS.atas.label}</span>
+      </div>
+    </div>
+
+    <div class="wrap">
+      <section class="visi-misi">
+        <div class="section-head"><div><h2>Visi &amp; Misi Ketua Dekan Cup</h2></div></div>
+        <div class="visi-misi-card">
+          <div class="vm-content">
+            <h3>Visi</h3>
+            <p>${HOME_VISI_MISI.visi}</p>
+            <h3>Misi</h3>
+            <ol>
+              ${HOME_VISI_MISI.misi.map((m) => `<li>${m}</li>`).join('')}
+            </ol>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="home-banner-frame">
+      <div class="home-banner">
+        <img src="${HOME_BANNERS.tengah.src}" alt="${HOME_BANNERS.tengah.label}"
+          onerror="this.closest('.home-banner').classList.add('is-placeholder'); this.remove();" />
+        <span class="home-banner-label">${HOME_BANNERS.tengah.label}</span>
+      </div>
+    </div>
+
+    <div class="wrap">
+      <section class="team-section">
+        <div class="section-head"><div><h2>Team Management</h2></div></div>
+        <div class="team-grid">
+          ${HOME_MANAGEMENT_TEAM.map((t) => `
+            <div class="team-card">
+              <img src="${t.photo}" alt="${t.name}" onerror="this.src='assets/logos/_avatar-placeholder.svg'" />
+              <div class="team-name">${t.name}</div>
+              <div class="team-role">${t.role}</div>
+            </div>`).join('')}
+        </div>
+      </section>
+    </div>`;
+});
 
 // ============================================================
 // HALAMAN: JADWAL

@@ -275,6 +275,110 @@ a.file-link:hover{
 .hima-card .code{ font-family:'Playfair Display'; font-weight:700; color:var(--maroon); }
 .hima-card .full{ font-size:.78rem; color:#6b5c48; margin-top:2px; }
 
+/* ============ HOME: BANNER LANDSCAPE ============ */
+.home-banner-frame{ padding:0 20px; }
+.home-banner{
+  position:relative;
+  width:100%;
+  aspect-ratio:21/9;
+  overflow:hidden;
+  border-radius:10px;
+  background:
+    linear-gradient(135deg, var(--paper-dark), var(--paper-light));
+  border:1px solid var(--line);
+  box-shadow:var(--shadow);
+}
+.home-banner img{ width:100%; height:100%; object-fit:cover; display:block; }
+.home-banner-label{
+  display:none;
+  font-family:'Special Elite', monospace;
+  font-size:.75rem; letter-spacing:.08em; text-transform:uppercase;
+  color:var(--forest);
+}
+.home-banner.is-placeholder{ display:flex; align-items:center; justify-content:center; }
+.home-banner.is-placeholder .home-banner-label{ display:block; }
+
+@media (min-width:900px){
+  .home-banner-frame{ padding:0 48px; }
+}
+
+/* ============ HOME: VISI & MISI ============ */
+.visi-misi{ padding-top:44px; padding-bottom:8px; }
+.visi-misi .section-head{ justify-content:center; text-align:center; margin-bottom:22px; }
+.visi-misi-card{
+  max-width:820px;
+  margin:0 auto;
+  background:var(--paper-light);
+  border:1px solid var(--line);
+  border-radius:12px;
+  padding:36px 40px;
+  box-shadow:var(--shadow);
+}
+.vm-content h3{
+  font-size:1.05rem;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+  font-family:'Special Elite', monospace;
+  color:var(--forest);
+  margin-bottom:10px;
+}
+.vm-content h3:not(:first-child){ margin-top:28px; padding-top:24px; border-top:1px dashed var(--line); }
+.vm-content p{ margin:0; line-height:1.7; }
+.vm-content ol{ margin:0; padding:0; list-style:none; counter-reset:misi; }
+.vm-content li{
+  counter-increment:misi;
+  position:relative;
+  padding-left:34px;
+  margin-bottom:14px;
+  line-height:1.6;
+}
+.vm-content li:last-child{ margin-bottom:0; }
+.vm-content li::before{
+  content:counter(misi);
+  position:absolute; left:0; top:1px;
+  width:22px; height:22px; border-radius:50%;
+  background:var(--maroon);
+  color:var(--paper-light);
+  font-family:'Playfair Display', serif;
+  font-weight:700; font-size:.72rem;
+  display:flex; align-items:center; justify-content:center;
+}
+
+@media (max-width:640px){
+  .visi-misi{ padding-top:32px; }
+  .visi-misi-card{ padding:26px 20px; border-radius:10px; }
+  .vm-content h3:not(:first-child){ margin-top:24px; padding-top:20px; }
+}
+
+/* ============ HOME: TEAM MANAGEMENT ============ */
+.team-section{ padding-top:44px; padding-bottom:48px; }
+.team-section .section-head{ justify-content:center; text-align:center; margin-bottom:22px; }
+.team-grid{
+  display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:22px;
+  max-width:820px; margin:0 auto;
+}
+.team-card{
+  background:var(--paper-light);
+  border:1px solid var(--line);
+  border-radius:10px;
+  overflow:hidden;
+  text-align:center;
+  box-shadow:var(--shadow);
+  transition:transform .15s ease, box-shadow .15s ease;
+}
+.team-card:hover{ transform:translateY(-3px); box-shadow:0 10px 24px rgba(59,46,34,0.24); }
+.team-card img{
+  width:100%; aspect-ratio:1/1; object-fit:cover; display:block;
+  background:var(--paper-dark);
+}
+.team-name{ font-family:'Playfair Display'; font-weight:700; color:var(--maroon); margin-top:14px; padding:0 10px; line-height:1.25; }
+.team-role{ font-size:.8rem; color:#6b5c48; margin:3px 0 16px; padding:0 10px; }
+
+@media (max-width:700px){
+  .team-grid{ grid-template-columns:repeat(2, minmax(0,1fr)); gap:14px; }
+  .team-section{ padding-top:36px; padding-bottom:36px; }
+}
+
 /* ============ PROFILE PAGE ============ */
 .profile-head{ display:flex; gap:18px; align-items:center; margin-bottom:18px; flex-wrap:wrap; }
 .profile-head img{ width:84px; height:84px; object-fit:contain; }
