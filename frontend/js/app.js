@@ -371,7 +371,7 @@ const HOME_MANAGEMENT_TEAM = [
   { name: 'Halin Ifestarika. A', role: 'Sekretaris 1', photo: 'assets/home/team-3.jpg' },
   { name: 'Riyanti Puspitaningrum', role: 'Sekretaris 2', photo: 'assets/home/team-4.jpg' },
   { name: 'Nabilah Arifah', role: 'Bendahara 1', photo: 'assets/home/team-5.jpg' },
-  { name: 'Hanum Nisyaul. A', role: 'Bendahara 2', photo: 'assets/home/team-6.jpg' },
+  { name: 'Hanum Nisyaul. A', role: 'Koordinator Perlengkapan', photo: 'assets/home/team-6.jpg' },
 ];
 
 route('/home', async () => {
@@ -384,9 +384,11 @@ route('/home', async () => {
       </div>
     </div>
 
+    <div class="section-divider"><span class="mark"></span></div>
+
     <div class="wrap">
       <section class="visi-misi">
-        <div class="section-head"><div><h2>Visi &amp; Misi Ketua Dekan Cup</h2></div></div>
+        <div class="section-head"><div><div class="eyebrow">Filosofi &middot; Dekan Cup</div><h2>Visi &amp; Misi Ketua Dekan Cup</h2></div></div>
         <div class="visi-misi-card">
           <div class="vm-content">
             <h3>Visi</h3>
@@ -408,9 +410,11 @@ route('/home', async () => {
       </div>
     </div>
 
+    <div class="section-divider"><span class="mark"></span></div>
+
     <div class="wrap">
       <section class="team-section">
-        <div class="section-head"><div><h2>Team Management</h2></div></div>
+        <div class="section-head"><div><div class="eyebrow">Di Balik Layar</div><h2>Team Management</h2></div></div>
         <div class="team-grid">
           ${HOME_MANAGEMENT_TEAM.map((t) => `
             <div class="team-card">
