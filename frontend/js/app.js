@@ -492,6 +492,7 @@ route('/jadwal', async ({ query }) => {
       <div class="section-head">
         <div><div class="eyebrow">Berita Pertandingan</div><h2>Jadwal &amp; Live Score</h2></div>
       </div>
+      <div id="live-spotlight"></div>
       <div class="filter-bar">
         <div class="filter-group">
           <label>Cabang Olahraga</label>
@@ -520,10 +521,28 @@ route('/jadwal', async ({ query }) => {
   ['f-hima', 'f-sport'].forEach((id) => document.getElementById(id).addEventListener('change', applyFilter));
 
   const matches = await api(`/matches?${new URLSearchParams(query).toString()}`);
+  // Live paling atas, lalu selesai, lalu yang belum mulai tetap di bawah.
+  const STATUS_SORT_RANK = { live: 0, finished: 1, scheduled: 2 };
+  const sortedMatches = [...matches].sort(
+    (a, b) => (STATUS_SORT_RANK[a.status] ?? 99) - (STATUS_SORT_RANK[b.status] ?? 99)
+  );
+
+  // Card besar "sedang berlangsung" di paling atas halaman, khusus untuk
+  // pertandingan yang statusnya live (bisa lebih dari satu sekaligus).
+  const liveMatches = sortedMatches.filter((m) => m.status === 'live');
+  const spotlightEl = document.getElementById('live-spotlight');
+  spotlightEl.innerHTML = liveMatches.length ? `
+    <div class="live-spotlight">
+      <div class="live-spotlight-label"><span class="live-dot"></span> Sedang Berlangsung</div>
+      <div class="live-spotlight-grid">
+        ${liveMatches.map(liveSpotlightCardHTML).join('')}
+      </div>
+    </div>` : '';
+
   const list = document.getElementById('match-list');
   const noFilterApplied = !query.hima && !query.sport_type;
-  if (matches.length) {
-    list.innerHTML = matches.map(matchCardHTML).join('');
+  if (sortedMatches.length) {
+    list.innerHTML = sortedMatches.map(matchCardHTML).join('');
   } else if (noFilterApplied) {
     // Belum ada pertandingan sama sekali yang dibuat (bukan sekadar hasil
     // filter kosong) — tampilkan "Coming soon!" biar lebih ramah dilihat
@@ -546,6 +565,28 @@ function matchCardHTML(m) {
       <div class="mc-meta">${m.sport_type} · ${m.round_name || ''} · ${fmtDate(m.match_date)} · ${m.venue || 'Venue belum ditentukan'}</div>
     </div>
     <div class="mc-status">${statusBadge(m.status)}</div>
+  </a>`;
+}
+
+function liveSpotlightCardHTML(m) {
+  return `
+  <a class="spotlight-card" href="#/match/${m.id}">
+    <div class="spotlight-top">
+      ${statusBadge(m.status)}
+      <span class="spotlight-meta">${m.sport_type}${m.round_name ? ' · ' + m.round_name : ''}</span>
+    </div>
+    <div class="spotlight-teams">
+      <div class="spotlight-team">
+        <img src="${m.home_hima.logo_url}" onerror="this.src='assets/logos/_placeholder.svg'"/>
+        <span>${m.home_hima.code}</span>
+      </div>
+      <div class="spotlight-score">${m.home_score} <span class="spotlight-dash">–</span> ${m.away_score}</div>
+      <div class="spotlight-team">
+        <img src="${m.away_hima.logo_url}" onerror="this.src='assets/logos/_placeholder.svg'"/>
+        <span>${m.away_hima.code}</span>
+      </div>
+    </div>
+    <div class="spotlight-venue">${m.venue || 'Venue belum ditentukan'}</div>
   </a>`;
 }
 
