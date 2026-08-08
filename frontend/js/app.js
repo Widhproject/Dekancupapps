@@ -446,7 +446,7 @@ const HOME_MANAGEMENT_TEAM = [
   { name: 'Halin Ifestarika. A', role: 'Sekretaris 1', photo: 'assets/home/team-3.jpg' },
   { name: 'Riyanti Puspitaningrum', role: 'Sekretaris 2', photo: 'assets/home/team-4.jpg' },
   { name: 'Nabilah Arifah', role: 'Bendahara 1', photo: 'assets/home/team-5.jpg' },
-  { name: 'Hanum Nisyaul. A', role: 'Koordinator Perlengkapan', photo: 'assets/home/team-6.jpg' },
+  { name: 'Hanum Nisyaul. A', role: 'Bendahara 2', photo: 'assets/home/team-6.jpg' },
 ];
 
 // ---- EXECUTIVE COMMITTEE (di bawah Team Management) --------------------
