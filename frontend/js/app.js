@@ -47,6 +47,21 @@ async function api(path, { method = 'GET', body, auth = false } = {}) {
   return data;
 }
 
+// ---------- Koreksi selisih jam perangkat vs jam server ----------
+// Timer basket dihitung mundur dengan membandingkan waktu target ("selesai
+// pada jam X") dengan jam SAAT INI di perangkat pemakai. Kalau jam
+// HP/laptop admin meleset dari jam server (hal yang sangat umum terjadi —
+// banyak perangkat tidak sinkron NTP dengan presisi), hasil hitungannya ikut
+// meleset (mis. timer 10 menit tampil jadi 12 menit begitu ditekan Mulai).
+// Untuk itu server selalu menyertakan `server_now_ms` di setiap respons
+// terkait pertandingan; setiap kali data itu diterima, kita catat selisihnya
+// di sini, lalu semua perhitungan sisa waktu dikoreksi otomatis.
+let clockOffsetMs = 0;
+function updateClockOffset(serverNowMs) {
+  if (typeof serverNowMs === 'number') clockOffsetMs = serverNowMs - Date.now();
+}
+function correctedNow() { return Date.now() + clockOffsetMs; }
+
 // Format detik sisa timer (angka bulat/pecahan) menjadi mm:ss
 function fmtCountdown(sec) {
   sec = Math.max(0, Math.round(sec));
@@ -58,13 +73,13 @@ function fmtCountdown(sec) {
 
 // Hitung sisa detik timer dari state pertandingan (dipakai berulang kali tiap tick,
 // bukan cuma sekali render) — kalau timer_end_at ada berarti sedang berjalan (hitung
-// selisih ke waktu sekarang), kalau tidak berarti sedang di-jeda/belum dimulai
-// (pakai angka yang sudah tersimpan).
+// selisih ke waktu sekarang, dikoreksi lewat clockOffsetMs di atas), kalau tidak
+// berarti sedang di-jeda/belum dimulai (pakai angka yang sudah tersimpan).
 function computeRemainingSec(m) {
   if (m.timer_end_at) {
     // Server menyimpan waktu UTC tanpa penanda 'Z' (lihat catatan di atas fmtDate).
     const end = new Date(m.timer_end_at.replace(' ', 'T') + 'Z').getTime();
-    return Math.max(0, (end - Date.now()) / 1000);
+    return Math.max(0, (end - correctedNow()) / 1000);
   }
   return m.timer_paused_remaining_sec ?? m.timer_duration_sec ?? 0;
 }
@@ -312,6 +327,19 @@ function skeletonFor(path) {
   return `<div class="wrap"><div class="section-head"><div><div class="skel skel-line w-30" style="height:12px;"></div><div class="skel skel-line w-40" style="height:22px;margin-top:6px;"></div></div></div>${body}</div>`;
 }
 
+// Animasi "pop" tiap kali angka skor berubah — supaya perubahan skor terasa
+// hidup, tidak langsung "loncat" begitu saja dari angka lama ke angka baru.
+// Dipicu ulang tiap kali dipanggil, meski nilainya sama seperti sebelumnya
+// (dianggap tetap ada update dari admin, jadi tetap kasih feedback visual).
+function bumpScoreEl(el, newValue) {
+  if (!el) return;
+  el.textContent = newValue;
+  el.classList.remove('score-bump');
+  // reflow paksa supaya class yang dilepas-tempel-lagi tetap memicu animasi
+  void el.offsetWidth;
+  el.classList.add('score-bump');
+}
+
 // ---------- Router ----------
 const routes = {};
 function route(path, handler) { routes[path] = handler; }
@@ -446,7 +474,7 @@ const HOME_MANAGEMENT_TEAM = [
   { name: 'Halin Ifestarika. A', role: 'Sekretaris 1', photo: 'assets/home/team-3.jpg' },
   { name: 'Riyanti Puspitaningrum', role: 'Sekretaris 2', photo: 'assets/home/team-4.jpg' },
   { name: 'Nabilah Arifah', role: 'Bendahara 1', photo: 'assets/home/team-5.jpg' },
-  { name: 'Hanum Nisyaul. A', role: 'Bendahara 2', photo: 'assets/home/team-6.jpg' },
+  { name: 'Hanum Nisyaul. A', role: 'Koordinator Perlengkapan', photo: 'assets/home/team-6.jpg' },
 ];
 
 // ---- EXECUTIVE COMMITTEE (di bawah Team Management) --------------------
@@ -794,6 +822,7 @@ function restartAdminTimerInterval(matchLike) {
 
 route('/match/:id', async ({ params }) => {
   const m = await api(`/matches/${params.id}`);
+  updateClockOffset(m.server_now_ms);
   const admin = isAdmin();
 
   app.innerHTML = `
@@ -848,12 +877,13 @@ route('/match/:id', async ({ params }) => {
   currentSocket = io(API_BASE.replace('/api', ''));
   currentSocket.emit('join_match', m.id);
   currentSocket.on('score_updated', ({ home_score, away_score }) => {
-    document.getElementById('home-score').textContent = home_score;
-    document.getElementById('away-score').textContent = away_score;
+    bumpScoreEl(document.getElementById('home-score'), home_score);
+    bumpScoreEl(document.getElementById('away-score'), away_score);
     if (admin) toast('Skor diperbarui!');
   });
   currentSocket.on('timer_updated', (payload) => {
     // Supaya kalau ada 2 admin buka halaman yang sama, timernya tetap sinkron.
+    updateClockOffset(payload.server_now_ms);
     m.timer_duration_sec = payload.timer_duration_sec;
     m.timer_end_at = payload.timer_end_at;
     m.timer_paused_remaining_sec = payload.timer_paused_remaining_sec;
@@ -1199,6 +1229,7 @@ route('/layar', async () => {
       root.innerHTML = scoreboardIdleHTML();
       return;
     }
+    updateClockOffset(m.server_now_ms);
 
     timerState = { timer_end_at: m.timer_end_at, timer_paused_remaining_sec: m.timer_paused_remaining_sec, timer_duration_sec: m.timer_duration_sec };
 
@@ -1206,6 +1237,10 @@ route('/layar', async () => {
       current = m.id;
       root.innerHTML = scoreboardMatchHTML(m);
     } else {
+      // Set biasa (bukan animasi) karena ini jalur polling cadangan yang jalan
+      // tiap 15 detik terlepas skor berubah atau tidak — animasi "pop" hanya
+      // dipasang di jalur socket real-time (lihat listener 'live_score_updated'
+      // di bawah) supaya cuma memicu saat memang ada perubahan sungguhan.
       const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
       set('sb-home-score', m.home_score);
       set('sb-away-score', m.away_score);
@@ -1233,8 +1268,8 @@ route('/layar', async () => {
     currentSocket.on('live_score_updated', (payload) => {
       if (payload.id === current) {
         const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-        set('sb-home-score', payload.home_score);
-        set('sb-away-score', payload.away_score);
+        bumpScoreEl(document.getElementById('sb-home-score'), payload.home_score);
+        bumpScoreEl(document.getElementById('sb-away-score'), payload.away_score);
         set('sb-home-babak', `(${payload.home_babak || 0})`);
         set('sb-away-babak', `(${payload.away_babak || 0})`);
       } else {
@@ -1243,6 +1278,7 @@ route('/layar', async () => {
     });
     currentSocket.on('live_timer_updated', (payload) => {
       if (payload.id === current) {
+        updateClockOffset(payload.server_now_ms);
         timerState = { timer_end_at: payload.timer_end_at, timer_paused_remaining_sec: payload.timer_paused_remaining_sec, timer_duration_sec: payload.timer_duration_sec };
         setTimerText();
       } else {

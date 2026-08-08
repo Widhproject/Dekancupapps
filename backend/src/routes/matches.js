@@ -27,6 +27,11 @@ function attachHimas(match) {
     timer_duration_sec: match.timer_duration_sec ?? null,
     timer_end_at: match.timer_end_at ?? null,
     timer_paused_remaining_sec: match.timer_paused_remaining_sec ?? null,
+    // Jam server saat respons ini dibuat (epoch ms). Dipakai frontend untuk
+    // mengoreksi selisih jam perangkat pemakai vs server — tanpa ini, timer
+    // basket bisa salah tampil (mis. "10 menit" jadi terlihat "12 menit")
+    // kalau jam HP/laptop admin tidak persis sama dengan jam server.
+    server_now_ms: Date.now(),
     photos: match.photos ?? [],
     home_hima: pickPublicFields(home),
     away_hima: pickPublicFields(away),
@@ -250,6 +255,7 @@ router.patch('/:id/timer', requireAuth, requireAdmin, (req, res) => {
     timer_duration_sec: match.timer_duration_sec,
     timer_end_at: match.timer_end_at,
     timer_paused_remaining_sec: match.timer_paused_remaining_sec,
+    server_now_ms: Date.now(),
   };
   const io = req.app.get('io');
   io.to(`match_${req.params.id}`).emit('timer_updated', payload);
