@@ -243,6 +243,75 @@ async function toggleHimaNotification(himaId, btn) {
   }
 }
 
+// ---------- Skeleton loading ----------
+// Ditampilkan sebentar saat data dari API belum sampai, sebagai pengganti
+// teks "Memuat…" polos — bentuknya menyerupai kartu asli tiap halaman
+// (lihat CSS .skel-* di style.css) supaya halaman tidak "melompat" begitu
+// data sungguhan datang menggantikannya.
+function skeletonMatchList(count = 4) {
+  const card = `
+    <div class="skel-match-card">
+      <div>
+        <div class="skel-match-teams">
+          <div class="skel-match-team"><div class="skel skel-circle"></div><div class="skel skel-line"></div></div>
+          <div class="skel skel-line skel-match-score"></div>
+          <div class="skel-match-team"><div class="skel skel-circle"></div><div class="skel skel-line"></div></div>
+        </div>
+        <div class="skel skel-line w-40" style="margin-top:10px;"></div>
+      </div>
+      <div class="skel skel-match-status"></div>
+    </div>`;
+  return `<div class="skel-list">${card.repeat(count)}</div>`;
+}
+function skeletonHimaGrid(count = 8) {
+  const card = `
+    <div class="skel-hima-card">
+      <div class="skel skel-circle"></div>
+      <div class="skel skel-line w-60"></div>
+      <div class="skel skel-line w-40"></div>
+    </div>`;
+  return `<div class="skel-grid-2">${card.repeat(count)}</div>`;
+}
+function skeletonProfile() {
+  return `
+    <div class="skel-profile-head">
+      <div class="skel skel-circle"></div>
+      <div class="skel-lines">
+        <div class="skel skel-line w-60" style="height:22px;"></div>
+        <div class="skel skel-line w-30"></div>
+      </div>
+    </div>
+    <div class="skel-list">
+      <div class="skel skel-line" style="height:60px;"></div>
+      <div class="skel skel-line" style="height:60px;"></div>
+    </div>`;
+}
+function skeletonScorecard() {
+  return `
+    <div class="skel-scorecard">
+      <div class="skel skel-line w-30" style="margin:0 auto 14px;"></div>
+      <div class="skel-score-row">
+        <div class="skel skel-circle"></div>
+        <div class="skel skel-line skel-num"></div>
+        <div class="skel skel-line skel-num"></div>
+        <div class="skel skel-circle"></div>
+      </div>
+    </div>
+    <div class="skel-list" style="margin-top:22px;">
+      <div class="skel skel-line" style="height:20px;"></div>
+      <div class="skel skel-line" style="height:20px;"></div>
+    </div>`;
+}
+function skeletonFor(path) {
+  let body;
+  if (path === '/jadwal' || path === '/riwayat') body = skeletonMatchList();
+  else if (path === '/hima') body = skeletonHimaGrid();
+  else if (path.startsWith('/hima/')) body = skeletonProfile();
+  else if (path.startsWith('/match/')) body = skeletonScorecard();
+  else body = `<div class="skel-list"><div class="skel skel-line" style="height:26px;width:40%;"></div><div class="skel skel-line" style="height:120px;"></div></div>`;
+  return `<div class="wrap"><div class="section-head"><div><div class="skel skel-line w-30" style="height:12px;"></div><div class="skel skel-line w-40" style="height:22px;margin-top:6px;"></div></div></div>${body}</div>`;
+}
+
 // ---------- Router ----------
 const routes = {};
 function route(path, handler) { routes[path] = handler; }
@@ -252,7 +321,10 @@ async function router() {
   const [path, queryStr] = hash.split('?');
   const query = Object.fromEntries(new URLSearchParams(queryStr));
 
-  document.querySelectorAll('#nav-links a').forEach((a) => {
+  // '[data-route]' sengaja dipakai (bukan cuma '#nav-links a') supaya
+  // highlight menu aktif berlaku juga untuk item di bottom-nav (navigasi
+  // utama di layar HP), tidak cuma menu di header.
+  document.querySelectorAll('[data-route]').forEach((a) => {
     a.classList.toggle('active', a.dataset.route === path);
   });
 
@@ -279,7 +351,7 @@ async function router() {
   renderAdminNav();
 
   if (!handler) { app.innerHTML = emptyState('Halaman tidak ditemukan.'); return; }
-  app.innerHTML = `<div class="wrap"><div class="empty-state">Memuat…</div></div>`;
+  app.innerHTML = skeletonFor(path);
   try {
     await handler({ params, query });
   } catch (err) {
@@ -308,11 +380,14 @@ function bindNavToggle() {
 }
 
 function renderAdminNav() {
+  const bottomAdminLink = document.getElementById('bottom-admin-link');
   if (isAdmin()) {
     adminSlot.innerHTML = `<a href="#/admin" data-route="/admin">Panel Admin</a><button id="logout-btn">Keluar</button>`;
     document.getElementById('logout-btn').onclick = () => { clearSession(); toast('Berhasil keluar'); router(); };
+    if (bottomAdminLink) { bottomAdminLink.href = '#/admin'; bottomAdminLink.dataset.route = '/admin'; }
   } else {
     adminSlot.innerHTML = `<a href="#/login" data-route="/login">Admin</a>`;
+    if (bottomAdminLink) { bottomAdminLink.href = '#/login'; bottomAdminLink.dataset.route = '/login'; }
   }
 }
 
