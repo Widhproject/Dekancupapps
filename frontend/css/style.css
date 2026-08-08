@@ -417,6 +417,19 @@ a.file-link:hover{
 .team-name{ font-family:'Playfair Display'; font-weight:700; color:var(--maroon); margin-top:14px; padding:0 10px; line-height:1.25; }
 .team-role{ font-size:.8rem; color:#6b5c48; margin:3px 0 16px; padding:0 10px; }
 
+/* ---- Executive Committee: 1 foto puncak + dua grup di bawahnya ---- */
+.team-section .section-head{ margin-top:40px; }
+.team-section .section-head:first-of-type{ margin-top:0; }
+.exec-subhead{
+  font-family:'Playfair Display'; font-weight:700; color:var(--maroon);
+  text-align:center; font-size:1.05rem; margin:30px 0 16px;
+}
+.team-grid--lead{ margin-bottom:6px; }
+.team-grid--lead .team-card{ grid-column:2; }
+@media (max-width:700px){
+  .team-grid--lead .team-card{ grid-column:1 / -1; max-width:50%; margin:0 auto; }
+}
+
 @media (max-width:700px){
   .team-grid{ grid-template-columns:repeat(2, minmax(0,1fr)); gap:14px; }
   .team-section{ padding-top:22px; padding-bottom:36px; }

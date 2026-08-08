@@ -374,6 +374,46 @@ const HOME_MANAGEMENT_TEAM = [
   { name: 'Hanum Nisyaul. A', role: 'Koordinator Perlengkapan', photo: 'assets/home/team-6.jpg' },
 ];
 
+// ---- EXECUTIVE COMMITTEE (di bawah Team Management) --------------------
+// - EXEC_LEAD          : 1 foto di puncak, di tengah-tengah antara grup
+//                        "Head of Conceptor" dan "Head of Technical" di bawahnya.
+// - EXEC_CONCEPTOR      : 8 anggota Head of Conceptor.
+// - EXEC_TECHNICAL      : 9 anggota Head of Technical.
+// Ukuran frame fotonya sama persis dengan card di Team Management (dipakai
+// ulang class .team-card/.team-grid yang sama). Ganti `name`, `role`, dan
+// `photo` sesuai data asli; kalau foto belum ada, otomatis jatuh ke ikon
+// placeholder seperti di Team Management.
+const EXEC_LEAD = [
+  { name: 'Bagas Widhi A.', role: 'Ketua Pelaksana', photo: 'assets/home/exec-lead.jpg' },
+];
+const EXEC_CONCEPTOR = [
+  { name: 'Siti Ropiah', role: 'Koordinator Acara', photo: 'assets/home/conceptor-1.jpg' },
+  { name: 'Claudya Zoelovely', role: 'Koordinator PDD', photo: 'assets/home/conceptor-2.jpg' },
+  { name: 'Naila Jihan S.', role: 'Koordinator KSK', photo: 'assets/home/conceptor-3.jpg' },
+  { name: 'Earlene Aprillia W.', role: 'Koordinator Medis', photo: 'assets/home/conceptor-4.jpg' },
+  { name: 'Nimas Ayu P.', role: 'Koordinator Finkom', photo: 'assets/home/conceptor-5.jpg' },
+  { name: 'Marco Jonathan P.', role: 'Koordinator KAHUMZIN', photo: 'assets/home/conceptor-6.jpg' },
+  { name: 'Galuh Septi T.', role: 'Koordinator Perlengkapan', photo: 'assets/home/conceptor-7.jpg' },
+  { name: 'Amirotul Madihah', role: 'Koordinator Sponsorship', photo: 'assets/home/conceptor-8.jpg' },
+];
+const EXEC_TECHNICAL = [
+  { name: 'Steve Rafael', role: 'Koordinator Voli', photo: 'assets/home/technical-1.jpg' },
+  { name: 'M. Fanda Akbar', role: 'Koordinator Basket', photo: 'assets/home/technical-2.jpg' },
+  { name: 'M. Fadhil Akbar', role: 'Koordinator Futsal', photo: 'assets/home/technical-3.jpg' },
+  { name: 'Nabilah Wiedama Putri', role: 'Koordinator Badminton', photo: 'assets/home/technical-4.jpg' },
+  { name: 'Qobidh Abu Haekal', role: 'Koordinator Catur', photo: 'assets/home/technical-5.jpg' },
+  { name: 'Edelfia Piranti E.', role: 'Koordinator Tari', photo: 'assets/home/technical-6.jpg' },
+  { name: 'Cintantya Sih Nareswari', role: 'Koordinator Fotografi', photo: 'assets/home/technical-7.jpg' },
+  { name: 'Maharani Surya Citra Dewi', role: 'Koordinator E-Sport', photo: 'assets/home/technical-8.jpg' },
+  { name: 'Jonatan Aditia Sihombing', role: 'Koordinator Band Competition', photo: 'assets/home/technical-9.jpg' },
+];
+const teamCardHTML = (t) => `
+  <div class="team-card">
+    <img src="${t.photo}" alt="${t.name}" onerror="this.src='assets/logos/_avatar-placeholder.svg'" />
+    <div class="team-name">${t.name}</div>
+    <div class="team-role">${t.role}</div>
+  </div>`;
+
 route('/home', async () => {
   app.innerHTML = `
     <div class="home-banner-frame is-full">
@@ -416,12 +456,23 @@ route('/home', async () => {
       <section class="team-section">
         <div class="section-head"><div><h2>Team Management</h2></div></div>
         <div class="team-grid">
-          ${HOME_MANAGEMENT_TEAM.map((t) => `
-            <div class="team-card">
-              <img src="${t.photo}" alt="${t.name}" onerror="this.src='assets/logos/_avatar-placeholder.svg'" />
-              <div class="team-name">${t.name}</div>
-              <div class="team-role">${t.role}</div>
-            </div>`).join('')}
+          ${HOME_MANAGEMENT_TEAM.map(teamCardHTML).join('')}
+        </div>
+
+        <div class="section-head"><div><h2>Executive Committee</h2></div></div>
+
+        <div class="team-grid team-grid--lead">
+          ${EXEC_LEAD.map(teamCardHTML).join('')}
+        </div>
+
+        <h3 class="exec-subhead">Head of Conceptor</h3>
+        <div class="team-grid">
+          ${EXEC_CONCEPTOR.map(teamCardHTML).join('')}
+        </div>
+
+        <h3 class="exec-subhead">Head of Technical</h3>
+        <div class="team-grid">
+          ${EXEC_TECHNICAL.map(teamCardHTML).join('')}
         </div>
       </section>
     </div>`;
