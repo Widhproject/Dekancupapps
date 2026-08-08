@@ -175,6 +175,11 @@ a.file-link:hover{
   overflow:hidden;
   border-bottom:1px solid var(--line);
 }
+/* Versi hero saat ada pertandingan live: lebih ringkas dari hero judul biasa
+   (yang perlu ruang besar untuk judul "Dekan Cup FST 2026"), karena isinya
+   sudah berupa kartu pertandingan sendiri yang sudah punya ukuran pas. */
+.hero.hero-live{ padding:28px 20px 30px; text-align:left; }
+.hero.hero-live .wrap{ text-align:left; }
 .hero .stamp-corner{
   position:absolute; width:70px; height:70px; opacity:.5;
 }

@@ -589,13 +589,31 @@ route('/jadwal', async ({ query }) => {
   const himas = await api('/himas?team_only=true');
   const himaOptions = himas.map((h) => `<option value="${h.id}" ${query.hima === h.id ? 'selected' : ''}>${h.code}</option>`).join('');
 
+  // Matches diambil DULUAN (sebelum render awal) supaya kita sudah tahu ada
+  // pertandingan live atau tidak sebelum memutuskan apa yang ditampilkan di
+  // posisi hero: judul biasa (kalau tidak ada live), atau langsung tampilan
+  // pertandingan yang sedang berlangsung (kalau ada) — jadi tidak perlu lagi
+  // menampilkan dua-duanya sekaligus (judul + spotlight terpisah di bawahnya).
+  const matches = await api(`/matches?${new URLSearchParams(query).toString()}`);
+  const liveMatches = matches.filter((m) => m.status === 'live');
+  const scheduledMatches = matches.filter((m) => m.status === 'scheduled');
+
+  const heroSection = liveMatches.length ? `
+    <section class="hero hero-live">
+      <div class="wrap">
+        <div class="live-spotlight-label"><span class="live-dot"></span> Sedang Berlangsung</div>
+        <div class="live-spotlight-grid">
+          ${liveMatches.map(liveSpotlightCardHTML).join('')}
+        </div>
+      </div>
+    </section>` : heroHTML();
+
   app.innerHTML = `
-    ${heroHTML()}
+    ${heroSection}
     <div class="wrap">
       <div class="section-head">
         <div><div class="eyebrow">Berita Pertandingan</div><h2>Jadwal &amp; Live Score</h2></div>
       </div>
-      <div id="live-spotlight"></div>
       <div class="filter-bar">
         <div class="filter-group">
           <label>Cabang Olahraga</label>
@@ -623,23 +641,9 @@ route('/jadwal', async ({ query }) => {
   };
   ['f-hima', 'f-sport'].forEach((id) => document.getElementById(id).addEventListener('change', applyFilter));
 
-  const matches = await api(`/matches?${new URLSearchParams(query).toString()}`);
-
-  // Live tampil sebagai spotlight di atas saja (tidak dobel di list bawah).
+  // Live tampil sebagai hero di atas saja (tidak dobel di list bawah).
   // Yang sudah selesai tidak ditampilkan di halaman ini lagi — otomatis
   // pindah ke tab Riwayat. List di bawah cuma untuk yang belum mulai.
-  const liveMatches = matches.filter((m) => m.status === 'live');
-  const scheduledMatches = matches.filter((m) => m.status === 'scheduled');
-
-  const spotlightEl = document.getElementById('live-spotlight');
-  spotlightEl.innerHTML = liveMatches.length ? `
-    <div class="live-spotlight">
-      <div class="live-spotlight-label"><span class="live-dot"></span> Sedang Berlangsung</div>
-      <div class="live-spotlight-grid">
-        ${liveMatches.map(liveSpotlightCardHTML).join('')}
-      </div>
-    </div>` : '';
-
   const list = document.getElementById('match-list');
   const noFilterApplied = !query.hima && !query.sport_type;
   if (scheduledMatches.length) {
