@@ -521,15 +521,13 @@ route('/jadwal', async ({ query }) => {
   ['f-hima', 'f-sport'].forEach((id) => document.getElementById(id).addEventListener('change', applyFilter));
 
   const matches = await api(`/matches?${new URLSearchParams(query).toString()}`);
-  // Live paling atas, lalu selesai, lalu yang belum mulai tetap di bawah.
-  const STATUS_SORT_RANK = { live: 0, finished: 1, scheduled: 2 };
-  const sortedMatches = [...matches].sort(
-    (a, b) => (STATUS_SORT_RANK[a.status] ?? 99) - (STATUS_SORT_RANK[b.status] ?? 99)
-  );
 
-  // Card besar "sedang berlangsung" di paling atas halaman, khusus untuk
-  // pertandingan yang statusnya live (bisa lebih dari satu sekaligus).
-  const liveMatches = sortedMatches.filter((m) => m.status === 'live');
+  // Live tampil sebagai spotlight di atas saja (tidak dobel di list bawah).
+  // Yang sudah selesai tidak ditampilkan di halaman ini lagi — otomatis
+  // pindah ke tab Riwayat. List di bawah cuma untuk yang belum mulai.
+  const liveMatches = matches.filter((m) => m.status === 'live');
+  const scheduledMatches = matches.filter((m) => m.status === 'scheduled');
+
   const spotlightEl = document.getElementById('live-spotlight');
   spotlightEl.innerHTML = liveMatches.length ? `
     <div class="live-spotlight">
@@ -541,8 +539,12 @@ route('/jadwal', async ({ query }) => {
 
   const list = document.getElementById('match-list');
   const noFilterApplied = !query.hima && !query.sport_type;
-  if (sortedMatches.length) {
-    list.innerHTML = sortedMatches.map(matchCardHTML).join('');
+  if (scheduledMatches.length) {
+    list.innerHTML = scheduledMatches.map(matchCardHTML).join('');
+  } else if (matches.length && (liveMatches.length || matches.some((m) => m.status === 'finished'))) {
+    // Ada data untuk filter ini, tapi semuanya sudah live/selesai —
+    // bukan "coming soon", cuma memang tidak ada lagi yang menunggu.
+    list.innerHTML = emptyState('Tidak ada pertandingan yang belum mulai untuk filter ini.');
   } else if (noFilterApplied) {
     // Belum ada pertandingan sama sekali yang dibuat (bukan sekadar hasil
     // filter kosong) — tampilkan "Coming soon!" biar lebih ramah dilihat
@@ -773,7 +775,7 @@ route('/match/:id', async ({ params }) => {
   currentSocket.on('score_updated', ({ home_score, away_score }) => {
     document.getElementById('home-score').textContent = home_score;
     document.getElementById('away-score').textContent = away_score;
-    toast('Skor diperbarui!');
+    if (admin) toast('Skor diperbarui!');
   });
   currentSocket.on('timer_updated', (payload) => {
     // Supaya kalau ada 2 admin buka halaman yang sama, timernya tetap sinkron.

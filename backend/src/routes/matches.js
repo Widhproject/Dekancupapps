@@ -1,9 +1,14 @@
 import { Router } from 'express';
 import { v4 as uuid } from 'uuid';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 import { db, save, nowStr } from '../db.js';
 import { requireAuth, requireAdmin, canManageSport } from '../middleware/auth.js';
 import { notifyHimaFollowers } from '../lib/push.js';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const router = Router();
 
 function attachHimas(match) {
@@ -283,20 +288,63 @@ router.post('/:id/events', requireAuth, requireAdmin, (req, res) => {
   res.status(201).json(event);
 });
 
-// Tambah foto/dokumentasi pertandingan (cukup URL gambar — sama seperti pola
-// logo_url/photo_url di tempat lain pada aplikasi ini, tanpa perlu server upload file).
-router.post('/:id/photos', requireAuth, requireAdmin, (req, res) => {
-  const { url, caption } = req.body;
-  if (!url) return res.status(400).json({ message: 'URL foto wajib diisi' });
+// ============================================================
+// FOTO/DOKUMENTASI PERTANDINGAN — upload file langsung dari device panitia
+// (bukan URL), disimpan di backend/uploads/match-photos dan disajikan lewat
+// static route /uploads (lihat server.js). Pola sama seperti upload_formulir
+// pendaftaran di registrations.js.
+// ============================================================
+const matchPhotosDir = path.join(__dirname, '..', '..', 'uploads', 'match-photos');
+fs.mkdirSync(matchPhotosDir, { recursive: true });
+
+const photoStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, matchPhotosDir),
+  filename: (req, file, cb) => cb(null, `${uuid()}${path.extname(file.originalname) || '.jpg'}`),
+});
+const uploadPhoto = multer({
+  storage: photoStorage,
+  limits: { fileSize: 8 * 1024 * 1024 }, // maks 8 MB, samakan dengan validasi di frontend
+  fileFilter: (req, file, cb) => {
+    if (!file.mimetype.startsWith('image/')) {
+      return cb(new Error('File harus berupa gambar'));
+    }
+    cb(null, true);
+  },
+});
+// Bungkus upload.single supaya error multer (file terlalu besar, bukan gambar, dll)
+// dibalas sebagai JSON rapi, bukan HTML error bawaan Express — dan supaya
+// "Failed to fetch" di sisi frontend (yang sebelumnya terjadi karena endpoint
+// ini tidak pernah benar-benar membaca multipart/form-data) tidak terjadi lagi.
+function uploadMatchPhoto(req, res, next) {
+  uploadPhoto.single('photo')(req, res, (err) => {
+    if (err) return res.status(400).json({ message: err.message || 'Gagal mengunggah foto' });
+    next();
+  });
+}
+
+// Tambah foto/dokumentasi pertandingan (file diunggah langsung dari device panitia).
+router.post('/:id/photos', requireAuth, requireAdmin, uploadMatchPhoto, (req, res) => {
+  if (!req.file) return res.status(400).json({ message: 'File foto wajib diisi' });
 
   const match = db.matches.find((m) => m.id === req.params.id);
-  if (!match) return res.status(404).json({ message: 'Pertandingan tidak ditemukan' });
+  if (!match) {
+    fs.unlink(path.join(matchPhotosDir, req.file.filename), () => {});
+    return res.status(404).json({ message: 'Pertandingan tidak ditemukan' });
+  }
   if (!canManageSport(req.user, match.sport_type)) {
+    fs.unlink(path.join(matchPhotosDir, req.file.filename), () => {});
     return res.status(403).json({ message: `Akun Anda tidak diizinkan mengelola cabor ${match.sport_type}` });
   }
 
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
   if (!match.photos) match.photos = [];
-  const photo = { id: uuid(), url, caption: caption || null, created_at: nowStr() };
+  const photo = {
+    id: uuid(),
+    url: `${baseUrl}/uploads/match-photos/${req.file.filename}`,
+    filename: req.file.filename,
+    caption: req.body.caption || null,
+    created_at: nowStr(),
+  };
   match.photos.push(photo);
   save();
 
@@ -313,8 +361,10 @@ router.delete('/:id/photos/:photoId', requireAuth, requireAdmin, (req, res) => {
     return res.status(403).json({ message: `Akun Anda tidak diizinkan mengelola cabor ${match.sport_type}` });
   }
 
+  const photo = (match.photos || []).find((p) => p.id === req.params.photoId);
   match.photos = (match.photos || []).filter((p) => p.id !== req.params.photoId);
   save();
+  if (photo?.filename) fs.unlink(path.join(matchPhotosDir, photo.filename), () => {});
 
   res.json({ message: 'Foto dihapus' });
 });
