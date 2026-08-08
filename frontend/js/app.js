@@ -376,7 +376,7 @@ const HOME_MANAGEMENT_TEAM = [
 
 route('/home', async () => {
   app.innerHTML = `
-    <div class="home-banner-frame">
+    <div class="home-banner-frame is-full">
       <div class="home-banner">
         <img src="${HOME_BANNERS.atas.src}" alt="${HOME_BANNERS.atas.label}"
           onerror="this.closest('.home-banner').classList.add('is-placeholder'); this.remove();" />
@@ -388,7 +388,7 @@ route('/home', async () => {
 
     <div class="wrap">
       <section class="visi-misi">
-        <div class="section-head"><div><div class="eyebrow">Filosofi &middot; Dekan Cup</div><h2>Visi &amp; Misi Ketua Dekan Cup</h2></div></div>
+        <div class="section-head"><div><h2>Visi dan Misi</h2></div></div>
         <div class="visi-misi-card">
           <div class="vm-content">
             <h3>Visi</h3>
@@ -414,7 +414,7 @@ route('/home', async () => {
 
     <div class="wrap">
       <section class="team-section">
-        <div class="section-head"><div><div class="eyebrow">Di Balik Layar</div><h2>Team Management</h2></div></div>
+        <div class="section-head"><div><h2>Team Management</h2></div></div>
         <div class="team-grid">
           ${HOME_MANAGEMENT_TEAM.map((t) => `
             <div class="team-card">

@@ -295,8 +295,8 @@ a.file-link:hover{
   content:"";
   position:absolute; inset:0;
   background:
-    linear-gradient(180deg, rgba(36,27,19,.30) 0%, rgba(36,27,19,0) 32%),
-    linear-gradient(180deg, transparent 68%, var(--paper-light) 100%);
+    linear-gradient(180deg, rgba(36,27,19,.22) 0%, rgba(36,27,19,0) 20%),
+    linear-gradient(180deg, transparent 88%, rgba(246,239,223,.82) 100%);
   pointer-events:none;
 }
 .home-banner-label{
@@ -311,6 +311,19 @@ a.file-link:hover{
 
 @media (min-width:900px){
   .home-banner-frame{ padding:0 48px; }
+}
+
+/* Varian full-bleed: khusus foto paling atas (hero), nempel dari tepi
+   layar tanpa jeda kiri-kanan. Foto lain tetap pakai frame biasa supaya
+   ada variasi ritme di halaman, bukan semua lebar penuh. */
+.home-banner-frame.is-full{ padding:0; }
+.home-banner-frame.is-full .home-banner{
+  border-radius:0;
+  border-left:0; border-right:0; border-top:0;
+  box-shadow:0 16px 30px -18px rgba(59,46,34,0.4);
+}
+@media (min-width:900px){
+  .home-banner-frame.is-full{ padding:0; }
 }
 
 /* ============ HOME: DIVIDER ANTAR SECTION ============ */
