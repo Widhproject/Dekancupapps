@@ -25,11 +25,18 @@
       </div>
     </div>
 
+    <!-- class="nav-link-dup-mobile" menandai item yang JUGA ada di
+         bottom-nav (Home/Jadwal/HIMA/Bagan). Di layar HP/tablet (≤900px,
+         saat bottom-nav tampil) item ini disembunyikan di sini lewat CSS
+         supaya tidak dobel — tapi tetap muncul normal di layar desktop
+         (>900px) karena di sana bottom-nav-nya sendiri yang disembunyikan,
+         jadi menu atas inilah satu-satunya jalan mengakses halaman itu. -->
     <nav class="nav-links" id="nav-links">
-      <a href="#/jadwal" data-route="/jadwal">Jadwal</a>
-      <a href="#/hima" data-route="/hima">HIMA</a>
+      <a href="#/home" data-route="/home" class="nav-link-dup-mobile">Home</a>
+      <a href="#/jadwal" data-route="/jadwal" class="nav-link-dup-mobile">Jadwal</a>
+      <a href="#/hima" data-route="/hima" class="nav-link-dup-mobile">HIMA</a>
       <a href="#/daftar" data-route="/daftar">Registrasi Peserta</a>
-      <a href="#/bagan" data-route="/bagan">Bagan</a>
+      <a href="#/bagan" data-route="/bagan" class="nav-link-dup-mobile">Bagan</a>
       <a href="#/riwayat" data-route="/riwayat">Riwayat</a>
       <span id="admin-nav-slot"></span>
     </nav>
@@ -50,6 +57,33 @@
 <main id="app"></main>
 
 <div class="toast-container" id="toast-container"></div>
+
+<!-- Navigasi utama untuk layar HP: 5 tujuan paling sering dibuka,
+     supaya nyaman dijangkau satu tangan tanpa harus buka menu hamburger.
+     Menu lengkap (termasuk Registrasi Peserta & Riwayat) tetap ada di
+     menu atas untuk layar besar / kalau butuh menu lainnya. -->
+<nav class="bottom-nav" id="bottom-nav" aria-label="Navigasi utama">
+  <a href="#/home" data-route="/home">
+    <svg viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 11l9-8 9 8M5 10v10h14V10"/></svg>
+    Home
+  </a>
+  <a href="#/jadwal" data-route="/jadwal">
+    <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path stroke-linecap="round" d="M3 10h18M8 3v4M16 3v4"/></svg>
+    Jadwal
+  </a>
+  <a href="#/hima" data-route="/hima">
+    <svg viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 20a3 3 0 01-3-3v-1a4 4 0 00-2-3.46M9 20a3 3 0 003-3v-1a4 4 0 012-3.46M9 20h6M6 8a3 3 0 106 0 3 3 0 00-6 0zm6 0a3 3 0 106 0 3 3 0 00-6 0z"/></svg>
+    HIMA
+  </a>
+  <a href="#/bagan" data-route="/bagan">
+    <svg viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 21h8M12 17v4M7 4h10v4a5 5 0 01-10 0V4zM3 6h4M17 6h4M3 6a2 2 0 002 2M21 6a2 2 0 01-2 2"/></svg>
+    Bagan
+  </a>
+  <a href="#/login" data-route="/login" id="bottom-admin-link">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path stroke-linecap="round" stroke-linejoin="round" d="M4 20c0-3.3 3.6-6 8-6s8 2.7 8 6"/></svg>
+    Admin
+  </a>
+</nav>
 
 <footer class="footer">
   <div class="flourish">✦</div>

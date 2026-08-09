@@ -70,6 +70,26 @@ function load() {
 // ============ "DATABASE" (objek in-memory, dipersist ke file JSON) ============
 export const db = load();
 
+// ============ MIGRASI: id per peserta di tiap pendaftaran ============
+// Peserta (players) di setiap pendaftaran awalnya tidak punya id sendiri
+// (cuma { name, nim, status? }) — cukup untuk ditampilkan, tapi tidak cukup
+// untuk diedit/dihapus satu-satu dari Panel Admin (fitur "Profil Atlet").
+// Migrasi ini jalan sekali saat server start: kasih id unik ke peserta lama
+// yang belum punya, supaya endpoint edit/hapus atlet per orang bisa bekerja
+// baik untuk data lama maupun baru.
+(function migratePlayerIds() {
+  let changed = false;
+  for (const reg of db.registrations || []) {
+    for (const p of reg.players || []) {
+      if (!p.id) {
+        p.id = uuid();
+        changed = true;
+      }
+    }
+  }
+  if (changed) save();
+})();
+
 export function save() {
   // Tulis ke file sementara lalu rename, supaya file JSON tidak korup kalau proses berhenti di tengah tulis
   const tmpPath = `${dbPath}.tmp`;

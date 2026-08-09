@@ -21,12 +21,39 @@ router.get('/', (req, res) => {
   res.json(rows);
 });
 
-// GET satu hima + daftar atlet
+// GET satu hima + daftar atlet + roster pemain per cabor (otomatis dari
+// pendaftaran yang masuk lewat form "/daftar/:cabor" — bukan diketik manual
+// oleh admin). Roster cuma menampilkan Nama & NIM tiap peserta, dikelompokkan
+// per sport_type (cabor), supaya begitu ada pendaftaran baru masuk untuk
+// HIMA ini, otomatis muncul di halaman profil HIMA tanpa perlu input ulang.
 router.get('/:id', (req, res) => {
   const hima = db.himas.find((h) => h.id === req.params.id || h.code === req.params.id);
   if (!hima) return res.status(404).json({ message: 'HIMA tidak ditemukan' });
   const athletes = db.athletes.filter((a) => a.hima_id === hima.id);
-  res.json({ ...hima, athletes });
+
+  // Kumpulkan semua pendaftaran milik HIMA ini, lalu kelompokkan pemainnya
+  // per cabor (sport_type). Satu cabor bisa punya beberapa pendaftaran
+  // (misalnya kategori Putra & Putri Voli terpisah) — pemain dari
+  // semua pendaftaran itu digabung jadi satu daftar per cabor.
+  const roster = {};
+  for (const r of db.registrations) {
+    if (r.hima_id !== hima.id) continue;
+    roster[r.sport_type] = roster[r.sport_type] || [];
+    for (const p of r.players || []) {
+      // reg_id & id (id atlet di dalam pendaftaran) disertakan supaya Panel
+      // Admin bisa edit/hapus atlet ini satu-satu lewat
+      // PATCH/DELETE /registrations/:reg_id/players/:id — halaman profil
+      // publik cukup pakai name & nim saja, field lain diabaikan di sana.
+      roster[r.sport_type].push({ id: p.id, reg_id: r.id, name: p.name, nim: p.nim });
+    }
+  }
+  // Ubah dari objek { sport_type: [...] } menjadi array supaya urutannya
+  // konsisten & gampang di-render frontend, diurutkan alfabet nama cabor.
+  const roster_by_sport = Object.keys(roster)
+    .sort((a, b) => a.localeCompare(b))
+    .map((sport_type) => ({ sport_type, players: roster[sport_type] }));
+
+  res.json({ ...hima, athletes, roster_by_sport });
 });
 
 // UPDATE profil hima (admin) — logo, deskripsi, kontak

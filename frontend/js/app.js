@@ -47,6 +47,21 @@ async function api(path, { method = 'GET', body, auth = false } = {}) {
   return data;
 }
 
+// ---------- Koreksi selisih jam perangkat vs jam server ----------
+// Timer basket dihitung mundur dengan membandingkan waktu target ("selesai
+// pada jam X") dengan jam SAAT INI di perangkat pemakai. Kalau jam
+// HP/laptop admin meleset dari jam server (hal yang sangat umum terjadi —
+// banyak perangkat tidak sinkron NTP dengan presisi), hasil hitungannya ikut
+// meleset (mis. timer 10 menit tampil jadi 12 menit begitu ditekan Mulai).
+// Untuk itu server selalu menyertakan `server_now_ms` di setiap respons
+// terkait pertandingan; setiap kali data itu diterima, kita catat selisihnya
+// di sini, lalu semua perhitungan sisa waktu dikoreksi otomatis.
+let clockOffsetMs = 0;
+function updateClockOffset(serverNowMs) {
+  if (typeof serverNowMs === 'number') clockOffsetMs = serverNowMs - Date.now();
+}
+function correctedNow() { return Date.now() + clockOffsetMs; }
+
 // Format detik sisa timer (angka bulat/pecahan) menjadi mm:ss
 function fmtCountdown(sec) {
   sec = Math.max(0, Math.round(sec));
@@ -58,13 +73,13 @@ function fmtCountdown(sec) {
 
 // Hitung sisa detik timer dari state pertandingan (dipakai berulang kali tiap tick,
 // bukan cuma sekali render) — kalau timer_end_at ada berarti sedang berjalan (hitung
-// selisih ke waktu sekarang), kalau tidak berarti sedang di-jeda/belum dimulai
-// (pakai angka yang sudah tersimpan).
+// selisih ke waktu sekarang, dikoreksi lewat clockOffsetMs di atas), kalau tidak
+// berarti sedang di-jeda/belum dimulai (pakai angka yang sudah tersimpan).
 function computeRemainingSec(m) {
   if (m.timer_end_at) {
     // Server menyimpan waktu UTC tanpa penanda 'Z' (lihat catatan di atas fmtDate).
     const end = new Date(m.timer_end_at.replace(' ', 'T') + 'Z').getTime();
-    return Math.max(0, (end - Date.now()) / 1000);
+    return Math.max(0, (end - correctedNow()) / 1000);
   }
   return m.timer_paused_remaining_sec ?? m.timer_duration_sec ?? 0;
 }
@@ -76,9 +91,52 @@ function fmtDate(str) {
 
 const STATUS_LABEL = { scheduled: 'Belum Mulai', live: 'Live', finished: 'Selesai' };
 const SPORT_TYPES = ['Futsal', 'Basket', 'Voli', 'Badminton', 'E-Sport Mobile Legends'];
+
+// Ikon cabor: dulu pakai emoji (rendering-nya beda-beda tiap OS/browser dan
+// suka pecah/kotak di beberapa perangkat), sekarang diganti ikon SVG garis
+// (monoline) buatan sendiri supaya tampilannya konsisten di semua perangkat
+// dan senada dengan tema situs (pakai currentColor, jadi otomatis ikut warna
+// teks di tempat dia dipasang — lihat .sport-icon-svg di css/style.css).
+const SPORT_ICONS = {
+  futsal: '<svg class="sport-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7.6l3.4 2.5-1.3 4h-4.2l-1.3-4z"/><path d="M12 7.6V4.3M15.4 10.1l3-1.9M8.6 10.1l-3-1.9M10.1 14.1l-2.3 3.2M13.9 14.1l2.3 3.2"/></svg>',
+  basket: '<svg class="sport-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3v18M5.3 5.3c2.4 1.9 3.9 4.2 3.9 6.7s-1.5 4.8-3.9 6.7M18.7 5.3c-2.4 1.9-3.9 4.2-3.9 6.7s1.5 4.8 3.9 6.7"/></svg>',
+  voli: '<svg class="sport-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 3.2c2.9 2.2 4.3 5.4 4.3 8.8s-1.4 6.6-4.3 8.8M6.2 5.6c2.2 1.5 4.8 2.4 7.6 2.3M4.1 14.2c2.5 1.2 5.3 1.8 8.1 1.5M19.9 14.2c-1.7 1.1-3.6 1.7-5.7 1.8"/></svg>',
+  badminton: '<svg class="sport-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.8l4 7.4h-8z"/><path d="M8.3 10.2h7.4l1.8 8.4H6.5z"/><circle cx="12" cy="19.6" r="1.6"/></svg>',
+  esport: '<svg class="sport-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6.8 8.2h10.4a4 4 0 0 1 3.95 4.62l-.58 3.5a1.9 1.9 0 0 1-3.32 1L15 15h-6l-2.25 2.32a1.9 1.9 0 0 1-3.32-1l-.58-3.5A4 4 0 0 1 6.8 8.2z"/><path d="M8 11v3M6.5 12.5h3"/><circle cx="16.6" cy="11" r=".9" fill="currentColor" stroke="none"/><circle cx="18.6" cy="13" r=".9" fill="currentColor" stroke="none"/></svg>',
+  fotografi: '<svg class="sport-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8.6h3.3l1.4-2.1h6.6l1.4 2.1H20a1 1 0 0 1 1 1V18a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.6a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.6" r="3.3"/><circle cx="17.6" cy="10.9" r=".5" fill="currentColor" stroke="none"/></svg>',
+  catur: '<svg class="sport-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4.2h2v2.1h2V4.2h2v2.1h2V4.2h2v3.9l-1.5 2v7.1H8.5v-7.1l-1.5-2z"/><path d="M6 20h12"/><path d="M8.3 17.2h7.4"/></svg>',
+  band: '<svg class="sport-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5v10.3"/><path d="M9 5l8-2.2v10"/><circle cx="7" cy="17.2" r="2.2" fill="currentColor" stroke="none"/><circle cx="15" cy="14.8" r="2.2" fill="currentColor" stroke="none"/></svg>',
+  tari: '<svg class="sport-icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="4.6" r="1.8"/><path d="M12 7v4.8"/><path d="M12 8.2L7.2 11M12 8.2l4.6-1.6"/><path d="M12 11.8L8 19M12 11.8l4.8 5.7"/></svg>',
+};
 const EVENT_LABEL = {
   goal: '⚽ Gol', yellow_card: '🟨 Kartu Kuning', red_card: '🟥 Kartu Merah',
   substitution: '🔁 Pergantian Pemain', note: '📝 Catatan',
+  // Khusus Basket — kartu kuning/merah/pergantian pemain tidak berlaku di
+  // basket, jadi diganti kejadian yang sesuai olahraga ini.
+  foul: '🚫 Foul', technical_foul: '⚠️ Technical Foul', timeout: '⏱️ Time Out',
+  free_throw: '🎯 Free Throw',
+};
+
+// Tombol "kejadian pertandingan" yang muncul di panel admin — beda per
+// cabor, karena kartu kuning/merah & pergantian pemain cuma relevan untuk
+// olahraga seperti Futsal, bukan Basket atau Voli.
+const SPORT_EVENT_BUTTONS = {
+  default: [
+    { type: 'goal', label: '⚽ Gol' },
+    { type: 'yellow_card', label: '🟨 Kartu Kuning' },
+    { type: 'red_card', label: '🟥 Kartu Merah' },
+    { type: 'substitution', label: '🔁 Pergantian' },
+  ],
+  Basket: [
+    { type: 'foul', label: '🚫 Foul' },
+    { type: 'technical_foul', label: '⚠️ Technical Foul' },
+    { type: 'timeout', label: '⏱️ Time Out' },
+    { type: 'free_throw', label: '🎯 Free Throw' },
+  ],
+  Voli: [
+    { type: 'timeout', label: '⏱️ Time Out' },
+    { type: 'note', label: '📝 Catatan' },
+  ],
 };
 
 // ---------- Registrasi Peserta ----------
@@ -97,22 +155,22 @@ const EVENT_LABEL = {
 const SOP_URL = 'https://drive.google.com/drive/folders/1rzUK1Gxs2JtfK72k1TegGmPyJ_iUKVY3?usp=drive_link';
 
 const SPORT_CONFIG = {
-  Futsal: { categories: ['Putra', 'Putri'], minPlayers: 5, maxPlayers: 15, hasSquadStatus: true, icon: '⚽', templateUrl: 'https://docs.google.com/document/d/1q_EMgIg-XYeQ3FrrX78g7xNqVEVpRqIHQOdTlbgl81M/edit?tab=t.0', forceMajeureUrl: 'https://drive.google.com/file/d/1JB8LOxjcvxd4o5xZAn9nEUbHfCR0pZ24/view?pli=1' },
-  Basket: { categories: ['Putra', 'Putri'], minPlayers: 5, maxPlayers: 12, hasSquadStatus: true, icon: '🏀', templateUrl: 'https://docs.google.com/document/d/1q_EMgIg-XYeQ3FrrX78g7xNqVEVpRqIHQOdTlbgl81M/edit?tab=t.0', forceMajeureUrl: 'https://drive.google.com/file/d/1JB8LOxjcvxd4o5xZAn9nEUbHfCR0pZ24/view?pli=1' },
-  Voli: { categories: ['Putra', 'Putri'], minPlayers: 6, maxPlayers: 12, hasSquadStatus: true, icon: '🏐', templateUrl: 'https://docs.google.com/document/d/1q_EMgIg-XYeQ3FrrX78g7xNqVEVpRqIHQOdTlbgl81M/edit?tab=t.0', forceMajeureUrl: 'https://drive.google.com/file/d/1JB8LOxjcvxd4o5xZAn9nEUbHfCR0pZ24/view?pli=1' },
+  Futsal: { categories: ['Putra', 'Putri'], minPlayers: 5, maxPlayers: 15, hasSquadStatus: true, icon: SPORT_ICONS.futsal, templateUrl: 'https://docs.google.com/document/d/1q_EMgIg-XYeQ3FrrX78g7xNqVEVpRqIHQOdTlbgl81M/edit?tab=t.0', forceMajeureUrl: 'https://drive.google.com/file/d/1JB8LOxjcvxd4o5xZAn9nEUbHfCR0pZ24/view?pli=1' },
+  Basket: { categories: ['Putra', 'Putri'], minPlayers: 5, maxPlayers: 12, hasSquadStatus: true, icon: SPORT_ICONS.basket, templateUrl: 'https://docs.google.com/document/d/1q_EMgIg-XYeQ3FrrX78g7xNqVEVpRqIHQOdTlbgl81M/edit?tab=t.0', forceMajeureUrl: 'https://drive.google.com/file/d/1JB8LOxjcvxd4o5xZAn9nEUbHfCR0pZ24/view?pli=1' },
+  Voli: { categories: ['Putra', 'Putri'], minPlayers: 6, maxPlayers: 12, hasSquadStatus: true, icon: SPORT_ICONS.voli, templateUrl: 'https://docs.google.com/document/d/1q_EMgIg-XYeQ3FrrX78g7xNqVEVpRqIHQOdTlbgl81M/edit?tab=t.0', forceMajeureUrl: 'https://drive.google.com/file/d/1JB8LOxjcvxd4o5xZAn9nEUbHfCR0pZ24/view?pli=1' },
   Badminton: {
     categories: ['Ganda Putra', 'Ganda Putri', 'Campuran'],
-    minPlayers: 2, maxPlayers: 4, icon: '🏸',
+    minPlayers: 2, maxPlayers: 4, icon: SPORT_ICONS.badminton,
     templateUrl: 'https://docs.google.com/document/d/1q_EMgIg-XYeQ3FrrX78g7xNqVEVpRqIHQOdTlbgl81M/edit?tab=t.0', forceMajeureUrl: 'https://drive.google.com/file/d/1JB8LOxjcvxd4o5xZAn9nEUbHfCR0pZ24/view?pli=1',
   },
   'E-Sport Mobile Legends': {
     categories: ['Mobile Legends', 'FIFA'],
-    minPlayers: 1, maxPlayers: 7, hasSquadStatus: true, icon: '🎮',
+    minPlayers: 1, maxPlayers: 7, hasSquadStatus: true, icon: SPORT_ICONS.esport,
     categoryPlayers: { 'Mobile Legends': { min: 5, max: 7 }, 'FIFA': { min: 2, max: 4 } },
     templateUrl: 'https://docs.google.com/document/d/1q_EMgIg-XYeQ3FrrX78g7xNqVEVpRqIHQOdTlbgl81M/edit?tab=t.0', forceMajeureUrl: 'https://drive.google.com/file/d/1JB8LOxjcvxd4o5xZAn9nEUbHfCR0pZ24/view?pli=1',
   },
   Fotografi: {
-    categories: ['Fotografi'], minPlayers: 1, maxPlayers: 6, icon: '📷',
+    categories: ['Fotografi'], minPlayers: 1, maxPlayers: 6, icon: SPORT_ICONS.fotografi,
     templateUrl: 'https://docs.google.com/document/d/1q_EMgIg-XYeQ3FrrX78g7xNqVEVpRqIHQOdTlbgl81M/edit?tab=t.0', forceMajeureUrl: 'https://drive.google.com/file/d/1JB8LOxjcvxd4o5xZAn9nEUbHfCR0pZ24/view?pli=1',
     extraFields: [
       {
@@ -125,14 +183,14 @@ const SPORT_CONFIG = {
       },
     ],
   },
-  Catur: { categories: ['Catur'], minPlayers: 4, maxPlayers: 4, icon: '♟️', templateUrl: 'https://docs.google.com/document/d/1q_EMgIg-XYeQ3FrrX78g7xNqVEVpRqIHQOdTlbgl81M/edit?tab=t.0', forceMajeureUrl: 'https://drive.google.com/file/d/1JB8LOxjcvxd4o5xZAn9nEUbHfCR0pZ24/view?pli=1' },
+  Catur: { categories: ['Catur'], minPlayers: 4, maxPlayers: 4, icon: SPORT_ICONS.catur, templateUrl: 'https://docs.google.com/document/d/1q_EMgIg-XYeQ3FrrX78g7xNqVEVpRqIHQOdTlbgl81M/edit?tab=t.0', forceMajeureUrl: 'https://drive.google.com/file/d/1JB8LOxjcvxd4o5xZAn9nEUbHfCR0pZ24/view?pli=1' },
   'Band Competition': {
-    categories: ['Band Competition'], minPlayers: 3, maxPlayers: 10, icon: '🎸',
+    categories: ['Band Competition'], minPlayers: 3, maxPlayers: 10, icon: SPORT_ICONS.band,
     templateUrl: 'https://docs.google.com/document/d/1q_EMgIg-XYeQ3FrrX78g7xNqVEVpRqIHQOdTlbgl81M/edit?tab=t.0', forceMajeureUrl: 'https://drive.google.com/file/d/1JB8LOxjcvxd4o5xZAn9nEUbHfCR0pZ24/view?pli=1',
     extraFields: [{ id: 'nama_band', label: 'Nama Band', type: 'text', required: true }],
   },
   Tari: {
-    categories: ['Tari'], minPlayers: 3, maxPlayers: 15, icon: '💃',
+    categories: ['Tari'], minPlayers: 3, maxPlayers: 15, icon: SPORT_ICONS.tari,
     templateUrl: 'https://docs.google.com/document/d/1q_EMgIg-XYeQ3FrrX78g7xNqVEVpRqIHQOdTlbgl81M/edit?tab=t.0', forceMajeureUrl: 'https://drive.google.com/file/d/1JB8LOxjcvxd4o5xZAn9nEUbHfCR0pZ24/view?pli=1',
     extraFields: [{ id: 'nama_grup', label: 'Nama Grup Tari', type: 'text', required: true }],
   },
@@ -226,16 +284,101 @@ async function toggleHimaNotification(himaId, btn) {
   }
 }
 
+// ---------- Skeleton loading ----------
+// Ditampilkan sebentar saat data dari API belum sampai, sebagai pengganti
+// teks "Memuat…" polos — bentuknya menyerupai kartu asli tiap halaman
+// (lihat CSS .skel-* di style.css) supaya halaman tidak "melompat" begitu
+// data sungguhan datang menggantikannya.
+function skeletonMatchList(count = 4) {
+  const card = `
+    <div class="skel-match-card">
+      <div>
+        <div class="skel-match-teams">
+          <div class="skel-match-team"><div class="skel skel-circle"></div><div class="skel skel-line"></div></div>
+          <div class="skel skel-line skel-match-score"></div>
+          <div class="skel-match-team"><div class="skel skel-circle"></div><div class="skel skel-line"></div></div>
+        </div>
+        <div class="skel skel-line w-40" style="margin-top:10px;"></div>
+      </div>
+      <div class="skel skel-match-status"></div>
+    </div>`;
+  return `<div class="skel-list">${card.repeat(count)}</div>`;
+}
+function skeletonHimaGrid(count = 8) {
+  const card = `
+    <div class="skel-hima-card">
+      <div class="skel skel-circle"></div>
+      <div class="skel skel-line w-60"></div>
+      <div class="skel skel-line w-40"></div>
+    </div>`;
+  return `<div class="skel-grid-2">${card.repeat(count)}</div>`;
+}
+function skeletonProfile() {
+  return `
+    <div class="skel-profile-head">
+      <div class="skel skel-circle"></div>
+      <div class="skel-lines">
+        <div class="skel skel-line w-60" style="height:22px;"></div>
+        <div class="skel skel-line w-30"></div>
+      </div>
+    </div>
+    <div class="skel-list">
+      <div class="skel skel-line" style="height:60px;"></div>
+      <div class="skel skel-line" style="height:60px;"></div>
+    </div>`;
+}
+function skeletonScorecard() {
+  return `
+    <div class="skel-scorecard">
+      <div class="skel skel-line w-30" style="margin:0 auto 14px;"></div>
+      <div class="skel-score-row">
+        <div class="skel skel-circle"></div>
+        <div class="skel skel-line skel-num"></div>
+        <div class="skel skel-line skel-num"></div>
+        <div class="skel skel-circle"></div>
+      </div>
+    </div>
+    <div class="skel-list" style="margin-top:22px;">
+      <div class="skel skel-line" style="height:20px;"></div>
+      <div class="skel skel-line" style="height:20px;"></div>
+    </div>`;
+}
+function skeletonFor(path) {
+  let body;
+  if (path === '/jadwal' || path === '/riwayat') body = skeletonMatchList();
+  else if (path === '/hima') body = skeletonHimaGrid();
+  else if (path.startsWith('/hima/')) body = skeletonProfile();
+  else if (path.startsWith('/match/')) body = skeletonScorecard();
+  else body = `<div class="skel-list"><div class="skel skel-line" style="height:26px;width:40%;"></div><div class="skel skel-line" style="height:120px;"></div></div>`;
+  return `<div class="wrap"><div class="section-head"><div><div class="skel skel-line w-30" style="height:12px;"></div><div class="skel skel-line w-40" style="height:22px;margin-top:6px;"></div></div></div>${body}</div>`;
+}
+
+// Animasi "pop" tiap kali angka skor berubah — supaya perubahan skor terasa
+// hidup, tidak langsung "loncat" begitu saja dari angka lama ke angka baru.
+// Dipicu ulang tiap kali dipanggil, meski nilainya sama seperti sebelumnya
+// (dianggap tetap ada update dari admin, jadi tetap kasih feedback visual).
+function bumpScoreEl(el, newValue) {
+  if (!el) return;
+  el.textContent = newValue;
+  el.classList.remove('score-bump');
+  // reflow paksa supaya class yang dilepas-tempel-lagi tetap memicu animasi
+  void el.offsetWidth;
+  el.classList.add('score-bump');
+}
+
 // ---------- Router ----------
 const routes = {};
 function route(path, handler) { routes[path] = handler; }
 
 async function router() {
-  const hash = location.hash.slice(1) || '/jadwal';
+  const hash = location.hash.slice(1) || '/home';
   const [path, queryStr] = hash.split('?');
   const query = Object.fromEntries(new URLSearchParams(queryStr));
 
-  document.querySelectorAll('#nav-links a').forEach((a) => {
+  // '[data-route]' sengaja dipakai (bukan cuma '#nav-links a') supaya
+  // highlight menu aktif berlaku juga untuk item di bottom-nav (navigasi
+  // utama di layar HP), tidak cuma menu di header.
+  document.querySelectorAll('[data-route]').forEach((a) => {
     a.classList.toggle('active', a.dataset.route === path);
   });
 
@@ -243,6 +386,11 @@ async function router() {
   if (scoreboardTimer) { clearInterval(scoreboardTimer); scoreboardTimer = null; }
   if (scoreboardPoll) { clearInterval(scoreboardPoll); scoreboardPoll = null; }
   if (adminTimerInterval) { clearInterval(adminTimerInterval); adminTimerInterval = null; }
+  // Tutup koneksi socket dari halaman sebelumnya secara default — halaman
+  // yang memang butuh live update (/jadwal, /match/:id, /layar) akan buka
+  // koneksi barunya sendiri lagi setelah ini. Mencegah koneksi menggantung
+  // saat pindah ke halaman yang tidak perlu real-time (mis. /hima, /bagan).
+  if (currentSocket) { currentSocket.disconnect(); currentSocket = null; }
 
   // route dinamis: /hima/:code , /match/:id
   const segments = path.split('/').filter(Boolean);
@@ -262,7 +410,7 @@ async function router() {
   renderAdminNav();
 
   if (!handler) { app.innerHTML = emptyState('Halaman tidak ditemukan.'); return; }
-  app.innerHTML = `<div class="wrap"><div class="empty-state">Memuat…</div></div>`;
+  app.innerHTML = skeletonFor(path);
   try {
     await handler({ params, query });
   } catch (err) {
@@ -291,11 +439,14 @@ function bindNavToggle() {
 }
 
 function renderAdminNav() {
+  const bottomAdminLink = document.getElementById('bottom-admin-link');
   if (isAdmin()) {
     adminSlot.innerHTML = `<a href="#/admin" data-route="/admin">Panel Admin</a><button id="logout-btn">Keluar</button>`;
     document.getElementById('logout-btn').onclick = () => { clearSession(); toast('Berhasil keluar'); router(); };
+    if (bottomAdminLink) { bottomAdminLink.href = '#/admin'; bottomAdminLink.dataset.route = '/admin'; }
   } else {
     adminSlot.innerHTML = `<a href="#/login" data-route="/login">Admin</a>`;
+    if (bottomAdminLink) { bottomAdminLink.href = '#/login'; bottomAdminLink.dataset.route = '/login'; }
   }
 }
 
@@ -317,14 +468,179 @@ function heroHTML() {
 }
 
 // ============================================================
+// HALAMAN: HOME
+// ============================================================
+// Semua konten di bawah ini sengaja dipisah ke satu tempat supaya gampang
+// diganti tanpa perlu utak-atik HTML/logic-nya.
+//
+// - HOME_BANNERS.atas   : foto landscape paling atas (foto "Our Big Team").
+// - HOME_BANNERS.tengah : foto landscape kedua, sekarang ditaruh di antara
+//   Visi & Misi dan Team Management.
+//   Taruh file fotonya di frontend/assets/home/ lalu ganti `src` di sini.
+//   Selama file belum ada / gagal dimuat, otomatis muncul placeholder abu-abu
+//   dengan tulisan `label`.
+// - HOME_VISI_MISI     : visi & misi Dekan Cup (tanpa foto/nama ketua).
+// - HOME_MANAGEMENT_TEAM : 6 anggota tim manajemen (foto + nama + jabatan).
+//   Ganti `photo` dengan path foto masing-masing (mis. 'assets/home/kevin.jpg').
+//   Kalau foto belum ada / gagal dimuat, otomatis jatuh ke ikon placeholder.
+
+const HOME_BANNERS = {
+  atas: { src: 'assets/home/our-big-team.jpg', label: 'Our Big Team' },
+  tengah: { src: 'assets/dekancup-reference.png', label: 'Badan Pengurus Inti' },
+};
+
+const HOME_VISI_MISI = {
+  visi: 'Menjadikan Dekan Cup FST 2026 sebagai wadah unggulan untuk mengembangkan bakat dan kreativitas mahasiswa FST di bidang seni dan olahraga, yang tidak hanya berdaya saing tinggi tetapi juga merefleksikan kemegahan dan martabat Fakultas Sains dan Teknologi',
+  misi: [
+    'Membangun semangat kompetitif yang sehat, sportif, dan beretika luhur.',
+    'Mendorong keterlibatan aktif seluruh mahasiswa FST dalam kegiatan seni dan olahraga',
+    'Memperkuat persatuan antar Himpunan melalui kompetisi yang bermartabat.',
+    'Meningkatkan kualitas penyelenggaraan dengan peraturan yang tegas dan transparan.',
+  ],
+};
+
+const HOME_MANAGEMENT_TEAM = [
+  { name: 'Panji Wirawan', role: 'Koorlap Konseptor', photo: 'assets/home/team-1.jpg' },
+  { name: 'Baari Muhammad', role: 'Koorlap Teknis', photo: 'assets/home/team-2.jpg' },
+  { name: 'Halin Ifestarika. A', role: 'Sekretaris 1', photo: 'assets/home/team-3.jpg' },
+  { name: 'Riyanti Puspitaningrum', role: 'Sekretaris 2', photo: 'assets/home/team-4.jpg' },
+  { name: 'Nabilah Arifah', role: 'Bendahara 1', photo: 'assets/home/team-5.jpg' },
+  { name: 'Hanum Nisyaul. A', role: 'Bendahara 2', photo: 'assets/home/team-6.jpg' },
+];
+
+// ---- EXECUTIVE COMMITTEE (di bawah Team Management) --------------------
+// - EXEC_LEAD          : 1 foto di puncak, di tengah-tengah antara grup
+//                        "Head of Conceptor" dan "Head of Technical" di bawahnya.
+// - EXEC_CONCEPTOR      : 8 anggota Head of Conceptor.
+// - EXEC_TECHNICAL      : 9 anggota Head of Technical.
+// Ukuran frame fotonya sama persis dengan card di Team Management (dipakai
+// ulang class .team-card/.team-grid yang sama). Ganti `name`, `role`, dan
+// `photo` sesuai data asli; kalau foto belum ada, otomatis jatuh ke ikon
+// placeholder seperti di Team Management.
+const EXEC_LEAD = [
+  { name: 'Bagas Widhi A.', role: 'Ketua Pelaksana', photo: 'assets/home/exec-lead.jpg' },
+];
+const EXEC_CONCEPTOR = [
+  { name: 'Siti Ropiah', role: 'Koordinator Acara', photo: 'assets/home/conceptor-1.jpg' },
+  { name: 'Claudya Zoelovely', role: 'Koordinator PDD', photo: 'assets/home/conceptor-2.jpg' },
+  { name: 'Naila Jihan S.', role: 'Koordinator KSK', photo: 'assets/home/conceptor-3.jpg' },
+  { name: 'Earlene Aprillia W.', role: 'Koordinator Medis', photo: 'assets/home/conceptor-4.jpg' },
+  { name: 'Nimas Ayu P.', role: 'Koordinator Finkom', photo: 'assets/home/conceptor-5.jpg' },
+  { name: 'Marco Jonathan P.', role: 'Koordinator KAHUMZIN', photo: 'assets/home/conceptor-6.jpg' },
+  { name: 'Galuh Septi T.', role: 'Koordinator Perlengkapan', photo: 'assets/home/conceptor-7.jpg' },
+  { name: 'Amirotul Madihah', role: 'Koordinator Sponsorship', photo: 'assets/home/conceptor-8.jpg' },
+];
+const EXEC_TECHNICAL = [
+  { name: 'Steve Rafael', role: 'Koordinator Voli', photo: 'assets/home/technical-1.jpg' },
+  { name: 'M. Fanda Akbar', role: 'Koordinator Basket', photo: 'assets/home/technical-2.jpg' },
+  { name: 'M. Fadhil Akbar', role: 'Koordinator Futsal', photo: 'assets/home/technical-3.jpg' },
+  { name: 'Nabilah Wiedama Putri', role: 'Koordinator Badminton', photo: 'assets/home/technical-4.jpg' },
+  { name: 'Qobidh Abu Haekal', role: 'Koordinator Catur', photo: 'assets/home/technical-5.jpg' },
+  { name: 'Edelfia Piranti E.', role: 'Koordinator Tari', photo: 'assets/home/technical-6.jpg' },
+  { name: 'Cintantya Sih Nareswari', role: 'Koordinator Fotografi', photo: 'assets/home/technical-7.jpg' },
+  { name: 'Maharani Surya Citra Dewi', role: 'Koordinator E-Sport', photo: 'assets/home/technical-8.jpg' },
+  { name: 'Jonatan Aditia Sihombing', role: 'Koordinator Band Competition', photo: 'assets/home/technical-9.jpg' },
+];
+const teamCardHTML = (t) => `
+  <div class="team-card">
+    <img src="${t.photo}" alt="${t.name}" onerror="this.src='assets/logos/_avatar-placeholder.svg'" />
+    <div class="team-name">${t.name}</div>
+    <div class="team-role">${t.role}</div>
+  </div>`;
+
+route('/home', async () => {
+  app.innerHTML = `
+    <div class="home-banner-frame is-full">
+      <div class="home-banner">
+        <img src="${HOME_BANNERS.atas.src}" alt="${HOME_BANNERS.atas.label}"
+          onerror="this.closest('.home-banner').classList.add('is-placeholder'); this.remove();" />
+        <span class="home-banner-label">${HOME_BANNERS.atas.label}</span>
+      </div>
+    </div>
+
+    <div class="section-divider"><span class="mark"></span></div>
+
+    <div class="wrap">
+      <section class="visi-misi">
+        <div class="section-head"><div><h2>Visi dan Misi</h2></div></div>
+        <div class="visi-misi-card">
+          <div class="vm-content">
+            <h3>Visi</h3>
+            <p>${HOME_VISI_MISI.visi}</p>
+            <h3>Misi</h3>
+            <ol>
+              ${HOME_VISI_MISI.misi.map((m) => `<li>${m}</li>`).join('')}
+            </ol>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="home-banner-frame">
+      <div class="home-banner">
+        <img src="${HOME_BANNERS.tengah.src}" alt="${HOME_BANNERS.tengah.label}"
+          onerror="this.closest('.home-banner').classList.add('is-placeholder'); this.remove();" />
+        <span class="home-banner-label">${HOME_BANNERS.tengah.label}</span>
+      </div>
+    </div>
+
+    <div class="section-divider"><span class="mark"></span></div>
+
+    <div class="wrap">
+      <section class="team-section">
+        <div class="section-head"><div><h2>Team Management</h2><div class="exec-tag">Executive Committee</div></div></div>
+
+        <div class="exec-lead-grid">
+          <div class="exec-lead-row">
+            ${EXEC_LEAD.map(teamCardHTML).join('')}
+          </div>
+        </div>
+
+        <div class="team-grid">
+          ${HOME_MANAGEMENT_TEAM.map(teamCardHTML).join('')}
+        </div>
+
+        <h3 class="exec-subhead">Head of Conceptor</h3>
+        <div class="team-grid">
+          ${EXEC_CONCEPTOR.map(teamCardHTML).join('')}
+        </div>
+
+        <h3 class="exec-subhead">Head of Technical</h3>
+        <div class="team-grid">
+          ${EXEC_TECHNICAL.map(teamCardHTML).join('')}
+        </div>
+      </section>
+    </div>`;
+});
+
+// ============================================================
 // HALAMAN: JADWAL
 // ============================================================
 route('/jadwal', async ({ query }) => {
   const himas = await api('/himas?team_only=true');
   const himaOptions = himas.map((h) => `<option value="${h.id}" ${query.hima === h.id ? 'selected' : ''}>${h.code}</option>`).join('');
 
+  // Matches diambil DULUAN (sebelum render awal) supaya kita sudah tahu ada
+  // pertandingan live atau tidak sebelum memutuskan apa yang ditampilkan di
+  // posisi hero: judul biasa (kalau tidak ada live), atau langsung tampilan
+  // pertandingan yang sedang berlangsung (kalau ada) — jadi tidak perlu lagi
+  // menampilkan dua-duanya sekaligus (judul + spotlight terpisah di bawahnya).
+  const matches = await api(`/matches?${new URLSearchParams(query).toString()}`);
+  const liveMatches = matches.filter((m) => m.status === 'live');
+  const scheduledMatches = matches.filter((m) => m.status === 'scheduled');
+
+  const heroSection = liveMatches.length ? `
+    <section class="hero hero-live">
+      <div class="wrap">
+        <div class="live-spotlight-label"><span class="live-dot"></span> Sedang Berlangsung</div>
+        <div class="live-spotlight-grid">
+          ${liveMatches.map(liveSpotlightCardHTML).join('')}
+        </div>
+      </div>
+    </section>` : heroHTML();
+
   app.innerHTML = `
-    ${heroHTML()}
+    ${heroSection}
     <div class="wrap">
       <div class="section-head">
         <div><div class="eyebrow">Berita Pertandingan</div><h2>Jadwal &amp; Live Score</h2></div>
@@ -356,11 +672,17 @@ route('/jadwal', async ({ query }) => {
   };
   ['f-hima', 'f-sport'].forEach((id) => document.getElementById(id).addEventListener('change', applyFilter));
 
-  const matches = await api(`/matches?${new URLSearchParams(query).toString()}`);
+  // Live tampil sebagai hero di atas saja (tidak dobel di list bawah).
+  // Yang sudah selesai tidak ditampilkan di halaman ini lagi — otomatis
+  // pindah ke tab Riwayat. List di bawah cuma untuk yang belum mulai.
   const list = document.getElementById('match-list');
   const noFilterApplied = !query.hima && !query.sport_type;
-  if (matches.length) {
-    list.innerHTML = matches.map(matchCardHTML).join('');
+  if (scheduledMatches.length) {
+    list.innerHTML = scheduledMatches.map(matchCardHTML).join('');
+  } else if (matches.length && (liveMatches.length || matches.some((m) => m.status === 'finished'))) {
+    // Ada data untuk filter ini, tapi semuanya sudah live/selesai —
+    // bukan "coming soon", cuma memang tidak ada lagi yang menunggu.
+    list.innerHTML = emptyState('Tidak ada pertandingan yang belum mulai untuk filter ini.');
   } else if (noFilterApplied) {
     // Belum ada pertandingan sama sekali yang dibuat (bukan sekadar hasil
     // filter kosong) — tampilkan "Coming soon!" biar lebih ramah dilihat
@@ -368,6 +690,36 @@ route('/jadwal', async ({ query }) => {
     list.innerHTML = emptyState('Coming soon!');
   } else {
     list.innerHTML = emptyState('Belum ada pertandingan untuk filter ini.');
+  }
+
+  // ---- Koneksi real-time khusus halaman ini ----
+  // Sebelumnya kartu live di sini cuma dirender sekali (statis) — kalau
+  // pengunjung tidak masuk ke halaman detail pertandingannya, skor yang
+  // tampil di sini tidak pernah ter-update walau pertandingannya terus
+  // berjalan. Sekarang halaman jadwal ikut dengar 2 event global:
+  // 'live_score_updated' (skor berubah → update angka di kartu, dengan
+  // animasi "pop" yang sama seperti di halaman detail) dan
+  // 'schedule_changed' (ada pertandingan mulai/selesai/dibuat baru →
+  // muat ulang seluruh halaman supaya kartu hero & daftar tetap akurat).
+  //
+  // Dibungkus try/catch dengan sengaja: ini fitur "bonus" di atas halaman
+  // yang sudah selesai dirender di atas — kalau karena sebab apa pun skrip
+  // socket.io gagal dimuat (mis. koneksi lambat, pemblokir iklan), jangan
+  // sampai seluruh halaman yang sudah tampil malah ikut hilang/error;
+  // cukup live-update-nya saja yang tidak aktif, pengunjung masih bisa
+  // pakai halaman & filter seperti biasa.
+  try {
+    if (currentSocket) { currentSocket.disconnect(); currentSocket = null; }
+    currentSocket = io(API_BASE.replace('/api', ''));
+    currentSocket.on('live_score_updated', (payload) => {
+      const card = document.querySelector(`.spotlight-card[data-match-id="${payload.id}"]`);
+      if (!card) return; // pertandingan ini sedang tidak tampil di hero, abaikan
+      bumpScoreEl(card.querySelector('[data-role="home-score"]'), payload.home_score);
+      bumpScoreEl(card.querySelector('[data-role="away-score"]'), payload.away_score);
+    });
+    currentSocket.on('schedule_changed', () => router());
+  } catch (err) {
+    console.warn('Live-update halaman jadwal tidak aktif:', err.message);
   }
 });
 
@@ -383,6 +735,32 @@ function matchCardHTML(m) {
       <div class="mc-meta">${m.sport_type} · ${m.round_name || ''} · ${fmtDate(m.match_date)} · ${m.venue || 'Venue belum ditentukan'}</div>
     </div>
     <div class="mc-status">${statusBadge(m.status)}</div>
+  </a>`;
+}
+
+function liveSpotlightCardHTML(m) {
+  return `
+  <a class="spotlight-card" href="#/match/${m.id}" data-match-id="${m.id}">
+    <div class="spotlight-top">
+      ${statusBadge(m.status)}
+      <span class="spotlight-meta">${m.sport_type}${m.round_name ? ' · ' + m.round_name : ''}</span>
+    </div>
+    <div class="spotlight-teams">
+      <div class="spotlight-team">
+        <img src="${m.home_hima.logo_url}" onerror="this.src='assets/logos/_placeholder.svg'"/>
+        <span>${m.home_hima.code}</span>
+      </div>
+      <div class="spotlight-score">
+        <span class="spotlight-score-num" data-role="home-score">${m.home_score}</span>
+        <span class="spotlight-dash">–</span>
+        <span class="spotlight-score-num" data-role="away-score">${m.away_score}</span>
+      </div>
+      <div class="spotlight-team">
+        <img src="${m.away_hima.logo_url}" onerror="this.src='assets/logos/_placeholder.svg'"/>
+        <span>${m.away_hima.code}</span>
+      </div>
+    </div>
+    <div class="spotlight-venue">${m.venue || 'Venue belum ditentukan'}</div>
   </a>`;
 }
 
@@ -462,6 +840,25 @@ route('/hima/:id', async ({ params }) => {
                 <div class="role">${a.role || ''} ${a.sport_type ? '· ' + a.sport_type : ''}</div>
               </div>`).join('')}
           </div>` : ''}
+        ${h.roster_by_sport?.length ? `
+          <div class="section-head"><h2 style="font-size:1.1rem">Profil Atlet</h2></div>
+          <div class="roster-by-sport">
+            ${h.roster_by_sport.map((group, i) => `
+              <details class="roster-group" ${i === 0 ? 'open' : ''}>
+                <summary class="roster-group-title">
+                  <span class="roster-caret">▸</span>
+                  ${group.sport_type}
+                  <span class="roster-count">(${group.players.length} peserta)</span>
+                </summary>
+                <table class="roster-table">
+                  <thead><tr><th>Nama</th><th>NIM</th></tr></thead>
+                  <tbody>
+                    ${group.players.map((p) => `
+                      <tr><td>${p.name}</td><td>${p.nim || '-'}</td></tr>`).join('')}
+                  </tbody>
+                </table>
+              </details>`).join('')}
+          </div>` : ''}
       </div>
     </div>`;
 
@@ -494,6 +891,7 @@ function restartAdminTimerInterval(matchLike) {
 
 route('/match/:id', async ({ params }) => {
   const m = await api(`/matches/${params.id}`);
+  updateClockOffset(m.server_now_ms);
   const admin = isAdmin();
 
   app.innerHTML = `
@@ -522,25 +920,39 @@ route('/match/:id', async ({ params }) => {
             ${m.events.length ? m.events.map(eventItemHTML).join('') : '<div class="empty-state" style="padding:16px;">Belum ada catatan.</div>'}
           </div>
         </div>
+
+        <div class="photo-feed" style="margin-top:22px;">
+          <h3>📷 Dokumentasi</h3>
+          <div id="photo-gallery" class="photo-gallery">
+            ${(m.photos && m.photos.length) ? m.photos.map(photoItemHTML).join('') : '<div class="empty-state" style="padding:16px;">Belum ada foto pertandingan.</div>'}
+          </div>
+        </div>
       </div>
 
       ${admin ? adminControlsHTML(m) : ''}
+    </div>
+
+    <div class="lightbox" id="photo-lightbox" style="display:none;">
+      <img id="photo-lightbox-img" src="" alt="" />
+      <button class="lightbox-close" id="photo-lightbox-close">✕</button>
     </div>`;
 
   if (admin) bindAdminControls(m);
   if (admin && SPORTS_WITH_TIMER.includes(m.sport_type)) restartAdminTimerInterval(m);
+  bindPhotoLightbox();
 
   // ---- Socket.io: join room match ini, dengarkan update real-time ----
   if (currentSocket) { currentSocket.disconnect(); currentSocket = null; }
   currentSocket = io(API_BASE.replace('/api', ''));
   currentSocket.emit('join_match', m.id);
   currentSocket.on('score_updated', ({ home_score, away_score }) => {
-    document.getElementById('home-score').textContent = home_score;
-    document.getElementById('away-score').textContent = away_score;
-    toast('Skor diperbarui!');
+    bumpScoreEl(document.getElementById('home-score'), home_score);
+    bumpScoreEl(document.getElementById('away-score'), away_score);
+    if (admin) toast('Skor diperbarui!');
   });
   currentSocket.on('timer_updated', (payload) => {
     // Supaya kalau ada 2 admin buka halaman yang sama, timernya tetap sinkron.
+    updateClockOffset(payload.server_now_ms);
     m.timer_duration_sec = payload.timer_duration_sec;
     m.timer_end_at = payload.timer_end_at;
     m.timer_paused_remaining_sec = payload.timer_paused_remaining_sec;
@@ -556,7 +968,38 @@ route('/match/:id', async ({ params }) => {
     document.querySelectorAll('.badge').forEach((b) => { if (b.closest('.scorecard')) b.outerHTML = statusBadge(status); });
     toast(`Status pertandingan: ${STATUS_LABEL[status]}`);
   });
+  currentSocket.on('photo_added', (photo) => {
+    const gallery = document.getElementById('photo-gallery');
+    if (!gallery) return;
+    if (gallery.querySelector('.empty-state')) gallery.innerHTML = '';
+    gallery.insertAdjacentHTML('beforeend', photoItemHTML(photo));
+    bindPhotoLightbox();
+    toast('Foto baru ditambahkan!');
+  });
 });
+
+function photoItemHTML(p) {
+  return `<div class="photo-thumb" data-photo-id="${p.id}">
+    <img src="${p.url}" alt="${p.caption || 'Dokumentasi pertandingan'}" loading="lazy" data-fullsrc="${p.url}" />
+    ${p.caption ? `<div class="photo-caption">${p.caption}</div>` : ''}
+  </div>`;
+}
+
+// Klik thumbnail foto → buka versi besar (lightbox sederhana, tanpa library eksternal).
+function bindPhotoLightbox() {
+  const lightbox = document.getElementById('photo-lightbox');
+  const lightboxImg = document.getElementById('photo-lightbox-img');
+  if (!lightbox || !lightboxImg) return;
+  document.querySelectorAll('#photo-gallery .photo-thumb img').forEach((img) => {
+    img.onclick = () => {
+      lightboxImg.src = img.dataset.fullsrc;
+      lightbox.style.display = 'flex';
+    };
+  });
+  const closeBtn = document.getElementById('photo-lightbox-close');
+  if (closeBtn) closeBtn.onclick = () => { lightbox.style.display = 'none'; lightboxImg.src = ''; };
+  lightbox.onclick = (e) => { if (e.target === lightbox) { lightbox.style.display = 'none'; lightboxImg.src = ''; } };
+}
 
 function eventItemHTML(ev) {
   const t = new Date(ev.created_at.replace(' ', 'T') + 'Z');
@@ -634,16 +1077,30 @@ function adminControlsHTML(m) {
     </div>
 
     <div class="event-buttons">
-      <button class="btn small" data-event="goal">⚽ Gol</button>
-      <button class="btn small" data-event="yellow_card">🟨 Kartu Kuning</button>
-      <button class="btn small" data-event="red_card">🟥 Kartu Merah</button>
-      <button class="btn small" data-event="substitution">🔁 Pergantian</button>
+      ${(SPORT_EVENT_BUTTONS[m.sport_type] || SPORT_EVENT_BUTTONS.default)
+        .map((e) => `<button class="btn small" data-event="${e.type}">${e.label}</button>`).join('')}
     </div>
     <div class="event-buttons">
       ${m.status !== 'live' ? `<button class="btn small green" id="btn-start">▶ Mulai Live</button>` : ''}
       ${m.status !== 'finished' ? `<button class="btn small primary" id="btn-finish">■ Selesaikan Pertandingan</button>` : ''}
     </div>
     ${m.status === 'live' ? `<div class="mc-meta" style="margin-top:10px;"><a href="#/layar" target="_blank">↗ Buka Layar Skor Besar</a></div>` : ''}
+
+    <div class="eyebrow" style="margin-top:14px;">Unggah Foto Dokumentasi</div>
+    <form id="photo-upload-form" class="photo-upload-form">
+      <input type="file" id="photo-file-input" accept="image/*" required />
+      <input type="text" id="photo-caption-input" placeholder="Keterangan foto (opsional)" maxlength="120" />
+      <button type="submit" class="btn small primary" id="photo-upload-btn">📤 Unggah Foto</button>
+    </form>
+    ${(m.photos && m.photos.length) ? `
+    <div class="admin-photo-manage">
+      ${m.photos.map((p) => `
+        <div class="admin-photo-row" data-photo-row="${p.id}">
+          <img src="${p.url}" alt="" />
+          <span class="mc-meta">${p.caption || '(tanpa keterangan)'}</span>
+          <button class="btn small ghost" data-delete-photo="${p.id}">🗑 Hapus</button>
+        </div>`).join('')}
+    </div>` : ''}
   </div>`;
 }
 
@@ -726,6 +1183,49 @@ function bindAdminControls(m) {
       router();
     } catch (err) { toast(err.message); }
   });
+
+  // ---- Upload & hapus foto dokumentasi pertandingan ----
+  const photoForm = document.getElementById('photo-upload-form');
+  if (photoForm) photoForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fileInput = document.getElementById('photo-file-input');
+    const file = fileInput.files[0];
+    if (!file) { toast('Pilih file foto dulu'); return; }
+    if (file.size > 8 * 1024 * 1024) { toast('Ukuran foto maksimal 8 MB'); return; }
+
+    const btn = document.getElementById('photo-upload-btn');
+    btn.disabled = true;
+    btn.textContent = 'Mengunggah…';
+    try {
+      const fd = new FormData();
+      fd.append('photo', file);
+      fd.append('caption', document.getElementById('photo-caption-input').value.trim());
+      const res = await fetch(`${API_BASE}/matches/${m.id}/photos`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${getToken()}` },
+        body: fd,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || 'Gagal mengunggah foto');
+      toast('Foto berhasil diunggah');
+      router(); // muat ulang halaman supaya galeri & panel kelola foto ter-update
+    } catch (err) {
+      toast(err.message);
+      btn.disabled = false;
+      btn.textContent = '📤 Unggah Foto';
+    }
+  });
+
+  document.querySelectorAll('[data-delete-photo]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('Hapus foto ini?')) return;
+      try {
+        await api(`/matches/${m.id}/photos/${btn.dataset.deletePhoto}`, { method: 'DELETE', auth: true });
+        toast('Foto dihapus');
+        router();
+      } catch (err) { toast(err.message); }
+    });
+  });
 }
 
 // ============================================================
@@ -796,6 +1296,7 @@ route('/layar', async () => {
       root.innerHTML = scoreboardIdleHTML();
       return;
     }
+    updateClockOffset(m.server_now_ms);
 
     timerState = { timer_end_at: m.timer_end_at, timer_paused_remaining_sec: m.timer_paused_remaining_sec, timer_duration_sec: m.timer_duration_sec };
 
@@ -803,6 +1304,10 @@ route('/layar', async () => {
       current = m.id;
       root.innerHTML = scoreboardMatchHTML(m);
     } else {
+      // Set biasa (bukan animasi) karena ini jalur polling cadangan yang jalan
+      // tiap 15 detik terlepas skor berubah atau tidak — animasi "pop" hanya
+      // dipasang di jalur socket real-time (lihat listener 'live_score_updated'
+      // di bawah) supaya cuma memicu saat memang ada perubahan sungguhan.
       const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
       set('sb-home-score', m.home_score);
       set('sb-away-score', m.away_score);
@@ -830,8 +1335,8 @@ route('/layar', async () => {
     currentSocket.on('live_score_updated', (payload) => {
       if (payload.id === current) {
         const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-        set('sb-home-score', payload.home_score);
-        set('sb-away-score', payload.away_score);
+        bumpScoreEl(document.getElementById('sb-home-score'), payload.home_score);
+        bumpScoreEl(document.getElementById('sb-away-score'), payload.away_score);
         set('sb-home-babak', `(${payload.home_babak || 0})`);
         set('sb-away-babak', `(${payload.away_babak || 0})`);
       } else {
@@ -840,6 +1345,7 @@ route('/layar', async () => {
     });
     currentSocket.on('live_timer_updated', (payload) => {
       if (payload.id === current) {
+        updateClockOffset(payload.server_now_ms);
         timerState = { timer_end_at: payload.timer_end_at, timer_paused_remaining_sec: payload.timer_paused_remaining_sec, timer_duration_sec: payload.timer_duration_sec };
         setTimerText();
       } else {
@@ -1395,6 +1901,86 @@ async function bindRegistrationPanel() {
   });
 }
 
+// ============================================================
+// PANEL ADMIN: kelola profil atlet (edit/hapus nama & NIM per orang,
+// diambil otomatis dari data pendaftaran per cabor — lihat GET /himas/:id
+// di backend, field roster_by_sport)
+// ============================================================
+function athleteRosterHTML(rosterBySport) {
+  if (!rosterBySport?.length) return emptyState('Belum ada pendaftaran atlet untuk HIMA ini.');
+  return `
+    <div class="roster-by-sport">
+      ${rosterBySport.map((group) => `
+        <div class="roster-group">
+          <div class="roster-group-title">${group.sport_type} <span class="roster-count">(${group.players.length} atlet)</span></div>
+          <table class="roster-table admin-roster-table">
+            <thead><tr><th>Nama</th><th>NIM</th><th></th></tr></thead>
+            <tbody>
+              ${group.players.map((p) => `
+                <tr data-player-row="${p.id}" data-reg-id="${p.reg_id}">
+                  <td><input type="text" data-pa-name value="${p.name}" /></td>
+                  <td><input type="text" data-pa-nim value="${p.nim}" /></td>
+                  <td style="white-space:nowrap;">
+                    <button type="button" class="btn small primary" data-pa-save="${p.id}">Simpan</button>
+                    <button type="button" class="btn small danger" data-pa-remove="${p.id}">Hapus</button>
+                  </td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>`).join('')}
+    </div>`;
+}
+
+async function bindAthleteProfilePanel(himas) {
+  const select = document.getElementById('pa-select');
+  const box = document.getElementById('pa-roster');
+
+  async function loadRoster() {
+    box.innerHTML = '<div class="empty-state">Memuat…</div>';
+    try {
+      const h = await api(`/himas/${select.value}`);
+      box.innerHTML = athleteRosterHTML(h.roster_by_sport);
+      bindRosterRowActions();
+    } catch (err) {
+      box.innerHTML = emptyState(`⚠️ ${err.message}`);
+    }
+  }
+
+  function bindRosterRowActions() {
+    box.querySelectorAll('[data-pa-save]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const row = btn.closest('[data-player-row]');
+        const playerId = row.dataset.playerRow;
+        const regId = row.dataset.regId;
+        const name = row.querySelector('[data-pa-name]').value.trim();
+        const nim = row.querySelector('[data-pa-nim]').value.trim();
+        if (!name || !nim) { toast('Nama dan NIM tidak boleh kosong'); return; }
+        try {
+          await api(`/registrations/${regId}/players/${playerId}`, { method: 'PATCH', auth: true, body: { name, nim } });
+          toast('Profil atlet disimpan');
+        } catch (err) { toast(err.message); }
+      });
+    });
+    box.querySelectorAll('[data-pa-remove]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const row = btn.closest('[data-player-row]');
+        const playerId = row.dataset.playerRow;
+        const regId = row.dataset.regId;
+        const name = row.querySelector('[data-pa-name]').value.trim();
+        if (!confirm(`Hapus "${name}" dari daftar atlet? (mis. karena mengundurkan diri)`)) return;
+        try {
+          await api(`/registrations/${regId}/players/${playerId}`, { method: 'DELETE', auth: true });
+          toast('Atlet dihapus');
+          loadRoster();
+        } catch (err) { toast(err.message); }
+      });
+    });
+  }
+
+  if (select.value) await loadRoster();
+  select.addEventListener('change', loadRoster);
+}
+
 route('/admin', async () => {
   if (!isAdmin()) { location.hash = '/login'; return; }
   const [matches, himas, sportConfig] = await Promise.all([api('/matches'), api('/himas?team_only=true'), api('/registrations/config')]);
@@ -1488,12 +2074,23 @@ route('/admin', async () => {
         <div id="reg-list"><div class="empty-state">Memuat…</div></div>
       </div>
 
+      <div class="admin-score-box">
+        <h3 style="margin-bottom:4px;">Kelola Profil Atlet</h3>
+        <p class="mc-meta" style="margin:0 0 14px;">Nama &amp; NIM atlet di sini otomatis diambil dari data pendaftaran per cabor. Kalau ada atlet yang mengundurkan diri atau salah input, tinggal edit/hapus langsung dari sini — tidak perlu ubah data pendaftaran atau kode. Perubahan langsung muncul di halaman profil HIMA.</p>
+        <div class="filter-group" style="margin-bottom:10px;">
+          <label>Pilih HIMA</label>
+          <select id="pa-select">${himas.map((h) => `<option value="${h.id}">${h.code} — ${h.full_name}</option>`).join('')}</select>
+        </div>
+        <div id="pa-roster"><div class="empty-state">Memuat…</div></div>
+      </div>
+
       <div class="section-head"><h2 style="font-size:1.2rem;">Semua Pertandingan</h2></div>
       <div class="match-list">${matches.length ? matches.map(adminMatchCardHTML).join('') : emptyState('Belum ada pertandingan.')}</div>
     </div>`;
 
   bindDeleteMatchButtons();
   bindRegistrationPanel();
+  bindAthleteProfilePanel(himas);
 
   document.querySelectorAll('[data-sl-save]').forEach((btn) => {
     btn.addEventListener('click', async () => {

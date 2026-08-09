@@ -290,7 +290,7 @@ router.post('/', uploadFormulir, async (req, res) => {
     return res.status(400).json({ message: 'File formulir pendaftaran (PDF) wajib diunggah' });
   }
   const cleanPlayers = Array.isArray(players)
-    ? players.filter((p) => p && p.name && p.name.trim()).map((p) => ({ name: p.name.trim(), nim: (p.nim || '').trim() }))
+    ? players.filter((p) => p && p.name && p.name.trim()).map((p) => ({ id: uuid(), name: p.name.trim(), nim: (p.nim || '').trim() }))
     : [];
   // categoryPlayers per kategori bisa berupa angka tetap (mis. 2 untuk ganda)
   // atau rentang { min, max } (mis. E-Sport: Mobile Legends 5–7, FIFA 1–1).
@@ -442,6 +442,54 @@ router.get('/export', requireAuth, requireAdmin, async (req, res) => {
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
   res.send(buffer);
+});
+
+// ============================================================
+// KELOLA PROFIL ATLET SATU-PER-SATU (Panel Admin) — supaya kalau ada atlet
+// yang mengundurkan diri/salah input, admin tinggal edit/hapus dari sini,
+// TANPA perlu ubah kode. Nama & NIM di sini otomatis ikut berubah di
+// halaman profil publik HIMA (karena profil publik ambil datanya langsung
+// dari pendaftaran ini, bukan salinan terpisah).
+// ============================================================
+
+// Ubah nama/NIM satu atlet.
+router.patch('/:regId/players/:playerId', requireAuth, requireAdmin, (req, res) => {
+  const reg = db.registrations.find((r) => r.id === req.params.regId);
+  if (!reg) return res.status(404).json({ message: 'Data pendaftaran tidak ditemukan' });
+  if (!canManageSport(req.user, reg.sport_type)) {
+    return res.status(403).json({ message: `Akun Anda tidak diizinkan mengelola cabor ${reg.sport_type}` });
+  }
+  const player = reg.players.find((p) => p.id === req.params.playerId);
+  if (!player) return res.status(404).json({ message: 'Atlet tidak ditemukan' });
+
+  const { name, nim } = req.body || {};
+  if (name !== undefined) {
+    if (!name.trim()) return res.status(400).json({ message: 'Nama tidak boleh kosong' });
+    player.name = name.trim();
+  }
+  if (nim !== undefined) {
+    if (!nim.trim()) return res.status(400).json({ message: 'NIM tidak boleh kosong' });
+    player.nim = nim.trim();
+  }
+  save();
+  res.json(player);
+});
+
+// Hapus satu atlet dari pendaftaran (mis. mengundurkan diri) tanpa perlu
+// menghapus seluruh data pendaftaran timnya.
+router.delete('/:regId/players/:playerId', requireAuth, requireAdmin, (req, res) => {
+  const reg = db.registrations.find((r) => r.id === req.params.regId);
+  if (!reg) return res.status(404).json({ message: 'Data pendaftaran tidak ditemukan' });
+  if (!canManageSport(req.user, reg.sport_type)) {
+    return res.status(403).json({ message: `Akun Anda tidak diizinkan mengelola cabor ${reg.sport_type}` });
+  }
+  const before = reg.players.length;
+  reg.players = reg.players.filter((p) => p.id !== req.params.playerId);
+  if (reg.players.length === before) {
+    return res.status(404).json({ message: 'Atlet tidak ditemukan' });
+  }
+  save();
+  res.json({ message: 'Atlet dihapus dari pendaftaran', players: reg.players });
 });
 
 // ============================================================
