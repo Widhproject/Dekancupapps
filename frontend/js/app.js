@@ -111,6 +111,32 @@ const SPORT_ICONS = {
 const EVENT_LABEL = {
   goal: '⚽ Gol', yellow_card: '🟨 Kartu Kuning', red_card: '🟥 Kartu Merah',
   substitution: '🔁 Pergantian Pemain', note: '📝 Catatan',
+  // Khusus Basket — kartu kuning/merah/pergantian pemain tidak berlaku di
+  // basket, jadi diganti kejadian yang sesuai olahraga ini.
+  foul: '🚫 Foul', technical_foul: '⚠️ Technical Foul', timeout: '⏱️ Time Out',
+  free_throw: '🎯 Free Throw',
+};
+
+// Tombol "kejadian pertandingan" yang muncul di panel admin — beda per
+// cabor, karena kartu kuning/merah & pergantian pemain cuma relevan untuk
+// olahraga seperti Futsal, bukan Basket atau Voli.
+const SPORT_EVENT_BUTTONS = {
+  default: [
+    { type: 'goal', label: '⚽ Gol' },
+    { type: 'yellow_card', label: '🟨 Kartu Kuning' },
+    { type: 'red_card', label: '🟥 Kartu Merah' },
+    { type: 'substitution', label: '🔁 Pergantian' },
+  ],
+  Basket: [
+    { type: 'foul', label: '🚫 Foul' },
+    { type: 'technical_foul', label: '⚠️ Technical Foul' },
+    { type: 'timeout', label: '⏱️ Time Out' },
+    { type: 'free_throw', label: '🎯 Free Throw' },
+  ],
+  Voli: [
+    { type: 'timeout', label: '⏱️ Time Out' },
+    { type: 'note', label: '📝 Catatan' },
+  ],
 };
 
 // ---------- Registrasi Peserta ----------
@@ -1051,10 +1077,8 @@ function adminControlsHTML(m) {
     </div>
 
     <div class="event-buttons">
-      <button class="btn small" data-event="goal">⚽ Gol</button>
-      <button class="btn small" data-event="yellow_card">🟨 Kartu Kuning</button>
-      <button class="btn small" data-event="red_card">🟥 Kartu Merah</button>
-      <button class="btn small" data-event="substitution">🔁 Pergantian</button>
+      ${(SPORT_EVENT_BUTTONS[m.sport_type] || SPORT_EVENT_BUTTONS.default)
+        .map((e) => `<button class="btn small" data-event="${e.type}">${e.label}</button>`).join('')}
     </div>
     <div class="event-buttons">
       ${m.status !== 'live' ? `<button class="btn small green" id="btn-start">▶ Mulai Live</button>` : ''}
