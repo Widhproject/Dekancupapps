@@ -1049,6 +1049,9 @@ label .sport-icon-svg{ margin-right:.3em; }
 @media (max-width:900px){
   .bottom-nav{ display:flex; }
   body{ padding-bottom:calc(60px + env(safe-area-inset-bottom)); }
+  /* Home/Jadwal/HIMA/Bagan sudah bisa diakses lewat bottom-nav di layar
+     ini, jadi disembunyikan di menu atas supaya tidak dobel. */
+  .nav-link-dup-mobile{ display:none; }
 }
 
 /* ---- Perbesar target sentuh elemen yang sering dipencet di HP ---- */

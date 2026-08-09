@@ -360,6 +360,11 @@ async function router() {
   if (scoreboardTimer) { clearInterval(scoreboardTimer); scoreboardTimer = null; }
   if (scoreboardPoll) { clearInterval(scoreboardPoll); scoreboardPoll = null; }
   if (adminTimerInterval) { clearInterval(adminTimerInterval); adminTimerInterval = null; }
+  // Tutup koneksi socket dari halaman sebelumnya secara default — halaman
+  // yang memang butuh live update (/jadwal, /match/:id, /layar) akan buka
+  // koneksi barunya sendiri lagi setelah ini. Mencegah koneksi menggantung
+  // saat pindah ke halaman yang tidak perlu real-time (mis. /hima, /bagan).
+  if (currentSocket) { currentSocket.disconnect(); currentSocket = null; }
 
   // route dinamis: /hima/:code , /match/:id
   const segments = path.split('/').filter(Boolean);
@@ -660,6 +665,36 @@ route('/jadwal', async ({ query }) => {
   } else {
     list.innerHTML = emptyState('Belum ada pertandingan untuk filter ini.');
   }
+
+  // ---- Koneksi real-time khusus halaman ini ----
+  // Sebelumnya kartu live di sini cuma dirender sekali (statis) — kalau
+  // pengunjung tidak masuk ke halaman detail pertandingannya, skor yang
+  // tampil di sini tidak pernah ter-update walau pertandingannya terus
+  // berjalan. Sekarang halaman jadwal ikut dengar 2 event global:
+  // 'live_score_updated' (skor berubah → update angka di kartu, dengan
+  // animasi "pop" yang sama seperti di halaman detail) dan
+  // 'schedule_changed' (ada pertandingan mulai/selesai/dibuat baru →
+  // muat ulang seluruh halaman supaya kartu hero & daftar tetap akurat).
+  //
+  // Dibungkus try/catch dengan sengaja: ini fitur "bonus" di atas halaman
+  // yang sudah selesai dirender di atas — kalau karena sebab apa pun skrip
+  // socket.io gagal dimuat (mis. koneksi lambat, pemblokir iklan), jangan
+  // sampai seluruh halaman yang sudah tampil malah ikut hilang/error;
+  // cukup live-update-nya saja yang tidak aktif, pengunjung masih bisa
+  // pakai halaman & filter seperti biasa.
+  try {
+    if (currentSocket) { currentSocket.disconnect(); currentSocket = null; }
+    currentSocket = io(API_BASE.replace('/api', ''));
+    currentSocket.on('live_score_updated', (payload) => {
+      const card = document.querySelector(`.spotlight-card[data-match-id="${payload.id}"]`);
+      if (!card) return; // pertandingan ini sedang tidak tampil di hero, abaikan
+      bumpScoreEl(card.querySelector('[data-role="home-score"]'), payload.home_score);
+      bumpScoreEl(card.querySelector('[data-role="away-score"]'), payload.away_score);
+    });
+    currentSocket.on('schedule_changed', () => router());
+  } catch (err) {
+    console.warn('Live-update halaman jadwal tidak aktif:', err.message);
+  }
 });
 
 function matchCardHTML(m) {
@@ -679,7 +714,7 @@ function matchCardHTML(m) {
 
 function liveSpotlightCardHTML(m) {
   return `
-  <a class="spotlight-card" href="#/match/${m.id}">
+  <a class="spotlight-card" href="#/match/${m.id}" data-match-id="${m.id}">
     <div class="spotlight-top">
       ${statusBadge(m.status)}
       <span class="spotlight-meta">${m.sport_type}${m.round_name ? ' · ' + m.round_name : ''}</span>
@@ -689,7 +724,11 @@ function liveSpotlightCardHTML(m) {
         <img src="${m.home_hima.logo_url}" onerror="this.src='assets/logos/_placeholder.svg'"/>
         <span>${m.home_hima.code}</span>
       </div>
-      <div class="spotlight-score">${m.home_score} <span class="spotlight-dash">–</span> ${m.away_score}</div>
+      <div class="spotlight-score">
+        <span class="spotlight-score-num" data-role="home-score">${m.home_score}</span>
+        <span class="spotlight-dash">–</span>
+        <span class="spotlight-score-num" data-role="away-score">${m.away_score}</span>
+      </div>
       <div class="spotlight-team">
         <img src="${m.away_hima.logo_url}" onerror="this.src='assets/logos/_placeholder.svg'"/>
         <span>${m.away_hima.code}</span>

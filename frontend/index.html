@@ -25,12 +25,18 @@
       </div>
     </div>
 
-    <!-- Item di sini SENGAJA hanya yang belum ada di bottom-nav (lihat di
-         bawah: Home/Jadwal/HIMA/Bagan/Admin sudah bisa diakses dari situ).
-         Menu ini jadi tempat untuk sisanya: Registrasi & Riwayat, plus
-         status login (Panel Admin/Keluar atau Admin). -->
+    <!-- class="nav-link-dup-mobile" menandai item yang JUGA ada di
+         bottom-nav (Home/Jadwal/HIMA/Bagan). Di layar HP/tablet (≤900px,
+         saat bottom-nav tampil) item ini disembunyikan di sini lewat CSS
+         supaya tidak dobel — tapi tetap muncul normal di layar desktop
+         (>900px) karena di sana bottom-nav-nya sendiri yang disembunyikan,
+         jadi menu atas inilah satu-satunya jalan mengakses halaman itu. -->
     <nav class="nav-links" id="nav-links">
+      <a href="#/home" data-route="/home" class="nav-link-dup-mobile">Home</a>
+      <a href="#/jadwal" data-route="/jadwal" class="nav-link-dup-mobile">Jadwal</a>
+      <a href="#/hima" data-route="/hima" class="nav-link-dup-mobile">HIMA</a>
       <a href="#/daftar" data-route="/daftar">Registrasi Peserta</a>
+      <a href="#/bagan" data-route="/bagan" class="nav-link-dup-mobile">Bagan</a>
       <a href="#/riwayat" data-route="/riwayat">Riwayat</a>
       <span id="admin-nav-slot"></span>
     </nav>
