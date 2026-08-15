@@ -74,7 +74,7 @@ function checkUpcomingMatchReminders() {
   let changed = false;
 
   for (const match of db.matches) {
-    if (match.status !== 'scheduled' || match.notified_30min) continue;
+    if (match.status !== 'scheduled' || match.notified_30min || !match.match_date) continue;
 
     // match_date disimpan sebagai "YYYY-MM-DD HH:MM:SS" UTC (lihat nowStr() di db.js).
     const matchTimeMs = new Date(match.match_date.replace(' ', 'T') + 'Z').getTime();
