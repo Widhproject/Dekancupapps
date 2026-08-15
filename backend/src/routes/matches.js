@@ -61,14 +61,26 @@ router.get('/', (req, res) => {
 
   if (status) rows = rows.filter((m) => m.status === status);
   if (sport_type) rows = rows.filter((m) => m.sport_type === sport_type);
-  if (date) rows = rows.filter((m) => m.match_date.slice(0, 10) === date);
+  // match_date bisa null (jadwal "To Be Announced" — waktunya belum diset),
+  // jadi jangan panggil .slice() langsung ke null; anggap tidak match filter
+  // tanggal manapun kalau memang belum ada waktunya.
+  if (date) rows = rows.filter((m) => (m.match_date || '').slice(0, 10) === date);
   if (hima) rows = rows.filter((m) => m.home_hima_id === hima || m.away_hima_id === hima);
 
   if (status === 'live') {
     // Untuk layar skor: pertandingan yang paling baru dimulai muncul duluan
-    rows.sort((a, b) => (b.live_started_at || b.match_date).localeCompare(a.live_started_at || a.match_date));
+    rows.sort((a, b) => (b.live_started_at || b.match_date || '').localeCompare(a.live_started_at || a.match_date || ''));
   } else {
-    rows.sort((a, b) => a.match_date.localeCompare(b.match_date));
+    // Pertandingan yang waktunya sudah pasti diurutkan lebih dulu (paling
+    // dekat duluan); yang masih "To Be Announced" (match_date null) selalu
+    // ditaruh paling belakang, supaya tidak menyisip di antara jadwal yang
+    // sudah pasti waktunya.
+    rows.sort((a, b) => {
+      if (!a.match_date && !b.match_date) return 0;
+      if (!a.match_date) return 1;
+      if (!b.match_date) return -1;
+      return a.match_date.localeCompare(b.match_date);
+    });
   }
 
   res.json(rows.map(attachHimas));
@@ -86,7 +98,11 @@ router.get('/:id', (req, res) => {
 // Buat jadwal baru (admin)
 router.post('/', requireAuth, requireAdmin, (req, res) => {
   const { sport_type, home_hima_id, away_hima_id, venue, match_date, round_name } = req.body;
-  if (!sport_type || !home_hima_id || !away_hima_id || !match_date) {
+  // match_date sengaja TIDAK diwajibkan — kalau admin belum menentukan
+  // waktunya, jadwal tetap bisa dibuat dan otomatis tampil sebagai
+  // "To Be Announced" di frontend (lihat fmtDate() di app.js) sampai
+  // waktunya di-set kemudian.
+  if (!sport_type || !home_hima_id || !away_hima_id) {
     return res.status(400).json({ message: 'Data pertandingan belum lengkap' });
   }
   if (!canManageSport(req.user, sport_type)) {
@@ -108,7 +124,10 @@ router.post('/', requireAuth, requireAdmin, (req, res) => {
     timer_paused_remaining_sec: null,
     photos: [],
     venue: venue || null,
-    match_date,
+    // Kosongkan jadi null (bukan string kosong ''), supaya konsisten dipakai
+    // sebagai penanda "belum diset" di semua tempat lain (filter, sorting,
+    // dan tampilan fmtDate() di frontend).
+    match_date: match_date || null,
     status: 'scheduled',
     round_name: round_name || null,
     created_by: req.user.id,
