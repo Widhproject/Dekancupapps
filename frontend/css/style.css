@@ -653,6 +653,35 @@ a.file-link:hover{
 .admin-score-box{
   background:var(--paper-light); border:1px solid var(--line); border-radius:var(--radius-md); padding:var(--space-5); box-shadow:var(--shadow);
 }
+
+/* Section panel admin yang bisa dilipat/dibuka (dropdown), dipakai supaya
+   panitia tidak harus scroll panjang begitu jumlah pendaftar/pertandingan
+   sudah banyak. Dibangun dari <details>/<summary> native HTML — otomatis
+   bisa diklik & aksesibel via keyboard tanpa perlu JS tambahan untuk
+   toggle-nya; JS cuma dipakai untuk mengingat section mana yang terakhir
+   dibuka (lihat ADMIN_OPEN_SECTIONS di app.js).
+   .admin-score-box dipertahankan sebagai pembungkus terluar (warna latar,
+   border, shadow tetap konsisten dengan section lain), <details> dipasang
+   di dalamnya menggantikan <h3> statis yang lama. */
+.admin-section{ padding:0; overflow:hidden; }
+.admin-section > summary{
+  list-style:none; cursor:pointer; padding:var(--space-5); margin:calc(var(--space-5) * -1);
+  display:flex; align-items:center; justify-content:space-between; gap:12px;
+  font-family:'Special Elite', monospace; font-size:1rem; color:var(--maroon);
+}
+.admin-section > summary::-webkit-details-marker{ display:none; }
+.admin-section > summary .admin-section-title{ display:flex; flex-direction:column; gap:2px; }
+.admin-section > summary .admin-section-title small{
+  font-family:'EB Garamond'; font-size:.78rem; letter-spacing:0; text-transform:none; color:var(--ink-soft, #6b6459);
+}
+.admin-section > summary .chevron{
+  flex-shrink:0; width:22px; height:22px; display:flex; align-items:center; justify-content:center;
+  border:1.5px solid var(--maroon); border-radius:50%; transition:transform .18s ease;
+}
+.admin-section[open] > summary .chevron{ transform:rotate(180deg); }
+.admin-section > summary:hover{ background:var(--paper); }
+.admin-section-body{ padding-top:var(--space-5); margin-top:var(--space-5); border-top:1px solid var(--line); }
+
 .score-controls{ display:flex; justify-content:space-around; margin-top:8px; flex-wrap:wrap; gap:16px; }
 .score-controls .team{ text-align:center; }
 .score-controls .btns{ display:flex; gap:8px; justify-content:center; margin-top:8px; }
@@ -690,6 +719,18 @@ a.file-link:hover{
 .admin-match-row .btn{ flex-shrink:0; }
 
 .event-buttons{ display:flex; gap:8px; flex-wrap:wrap; margin-top:14px; justify-content:center; }
+
+.event-recorder{
+  display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:center; margin-top:8px;
+}
+.event-recorder select{
+  padding:8px 10px; border:1px solid var(--line); border-radius:var(--radius-xs);
+  background:var(--paper-light); font-size:.85rem; font-family:inherit;
+}
+.event-recorder input[type="text"]{
+  flex:1; min-width:160px; padding:8px 10px; border:1px solid var(--line); border-radius:var(--radius-xs);
+  background:var(--paper-light); font-size:.85rem; font-family:inherit;
+}
 
 .login-box{
   max-width:380px; margin:var(--space-7) auto; background:var(--paper-light); border:1px solid var(--line);

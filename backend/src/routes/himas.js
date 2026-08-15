@@ -5,6 +5,29 @@ import { requireAuth, requireAdmin } from '../middleware/auth.js';
 
 const router = Router();
 
+// Label tampilan untuk satu grup roster (sport_type + category). Dipakai
+// supaya kategori yang berbeda dalam satu cabor (mis. Voli Putra vs Voli
+// Putri, Basket Putra vs Putri, Badminton Ganda Putra/Ganda Putri/Campuran,
+// atau Mobile Legends vs FIFA di E-Sport) TIDAK tercampur jadi satu daftar,
+// melainkan tampil sebagai grup terpisah di halaman profil atlet — sesuai
+// kategori yang dipilih pendaftar saat isi form (lihat SPORT_CONFIG di
+// registrations.js untuk daftar kategori tiap cabor).
+function rosterGroupLabel(sport_type, category) {
+  // Nama cabor pendaftaran E-Sport masih "E-Sport Mobile Legends" (nama
+  // lama), padahal menaungi 2 kategori berbeda: Mobile Legends & FIFA.
+  // Supaya labelnya jelas, tampilkan sebagai "E-Sport - Mobile Legends" /
+  // "E-Sport - FIFA", bukan "E-Sport Mobile Legends - FIFA" yang rancu.
+  if (sport_type === 'E-Sport Mobile Legends') {
+    return `E-Sport - ${category || 'Lainnya'}`;
+  }
+  // Cabor dengan kategori tunggal yang namanya sama dengan cabor itu sendiri
+  // (Fotografi, Catur, Band Competition, Tari) tidak perlu label ganda.
+  if (category && category !== sport_type) {
+    return `${sport_type} - ${category}`;
+  }
+  return sport_type;
+}
+
 // Isi field hanya jika value dikirim (meniru COALESCE(?, kolom) versi SQL lama)
 function applyIfProvided(target, patch, keys) {
   for (const key of keys) {
@@ -32,26 +55,39 @@ router.get('/:id', (req, res) => {
   const athletes = db.athletes.filter((a) => a.hima_id === hima.id);
 
   // Kumpulkan semua pendaftaran milik HIMA ini, lalu kelompokkan pemainnya
-  // per cabor (sport_type). Satu cabor bisa punya beberapa pendaftaran
-  // (misalnya kategori Putra & Putri Voli terpisah) — pemain dari
-  // semua pendaftaran itu digabung jadi satu daftar per cabor.
+  // per cabor + KATEGORI (sport_type + category). Satu cabor bisa punya
+  // beberapa pendaftaran dengan kategori berbeda (mis. Voli Putra & Voli
+  // Putri, Basket Putra & Putri, Badminton Ganda Putra/Ganda Putri/
+  // Campuran, atau E-Sport Mobile Legends & FIFA) — supaya tidak tercampur
+  // di halaman profil atlet, tiap kombinasi sport_type+category jadi
+  // grupnya sendiri-sendiri.
   const roster = {};
   for (const r of db.registrations) {
     if (r.hima_id !== hima.id) continue;
-    roster[r.sport_type] = roster[r.sport_type] || [];
+    const key = `${r.sport_type}::${r.category || ''}`;
+    if (!roster[key]) roster[key] = { sport_type: r.sport_type, category: r.category || null, players: [] };
     for (const p of r.players || []) {
       // reg_id & id (id atlet di dalam pendaftaran) disertakan supaya Panel
       // Admin bisa edit/hapus atlet ini satu-satu lewat
       // PATCH/DELETE /registrations/:reg_id/players/:id — halaman profil
       // publik cukup pakai name & nim saja, field lain diabaikan di sana.
-      roster[r.sport_type].push({ id: p.id, reg_id: r.id, name: p.name, nim: p.nim });
+      roster[key].players.push({ id: p.id, reg_id: r.id, name: p.name, nim: p.nim });
     }
   }
-  // Ubah dari objek { sport_type: [...] } menjadi array supaya urutannya
-  // konsisten & gampang di-render frontend, diurutkan alfabet nama cabor.
+  // Ubah dari objek { key: {...} } menjadi array supaya urutannya konsisten
+  // & gampang di-render frontend, diurutkan alfabet berdasarkan label
+  // tampilan grupnya (mis. "Badminton - Campuran" sebelum "Badminton -
+  // Ganda Putra"). Field `sport_type` diisi label tampilan (bukan nama
+  // cabor mentah) supaya frontend yang sudah pakai `group.sport_type`
+  // otomatis menampilkan kategori tanpa perlu diubah; `category` disertakan
+  // terpisah untuk kebutuhan lain di masa depan.
   const roster_by_sport = Object.keys(roster)
-    .sort((a, b) => a.localeCompare(b))
-    .map((sport_type) => ({ sport_type, players: roster[sport_type] }));
+    .map((key) => ({
+      sport_type: rosterGroupLabel(roster[key].sport_type, roster[key].category),
+      category: roster[key].category,
+      players: roster[key].players,
+    }))
+    .sort((a, b) => a.sport_type.localeCompare(b.sport_type));
 
   res.json({ ...hima, athletes, roster_by_sport });
 });

@@ -85,6 +85,9 @@ function computeRemainingSec(m) {
 }
 
 function fmtDate(str) {
+  // Jadwal boleh dibuat tanpa waktu (match_date null) — tampilkan sebagai
+  // "To Be Announced" alih-alih error atau tanggal "Invalid Date".
+  if (!str) return 'To Be Announced';
   const d = new Date(str.replace(' ', 'T'));
   return d.toLocaleString('id-ID', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
@@ -917,7 +920,7 @@ route('/match/:id', async ({ params }) => {
         <div class="event-feed">
           <h3>Catatan Pertandingan</h3>
           <div id="event-list">
-            ${m.events.length ? m.events.map(eventItemHTML).join('') : '<div class="empty-state" style="padding:16px;">Belum ada catatan.</div>'}
+            ${m.events.length ? m.events.map((ev) => eventItemHTML(ev, m)).join('') : '<div class="empty-state" style="padding:16px;">Belum ada catatan.</div>'}
           </div>
         </div>
 
@@ -961,7 +964,7 @@ route('/match/:id', async ({ params }) => {
   currentSocket.on('event_added', (ev) => {
     const list = document.getElementById('event-list');
     if (list.querySelector('.empty-state')) list.innerHTML = '';
-    list.insertAdjacentHTML('afterbegin', eventItemHTML(ev));
+    list.insertAdjacentHTML('afterbegin', eventItemHTML(ev, m));
     toast(`Catatan baru: ${EVENT_LABEL[ev.event_type] || ev.event_type}`);
   });
   currentSocket.on('status_updated', ({ status }) => {
@@ -1001,11 +1004,20 @@ function bindPhotoLightbox() {
   lightbox.onclick = (e) => { if (e.target === lightbox) { lightbox.style.display = 'none'; lightboxImg.src = ''; } };
 }
 
-function eventItemHTML(ev) {
+function eventItemHTML(ev, m) {
   const t = new Date(ev.created_at.replace(' ', 'T') + 'Z');
+  // Kode tim (mis. "HIMAKI") kalau kejadian ini terkait salah satu tim yang
+  // sedang bertanding — m opsional (dipakai lagi lewat listener socket di
+  // bawah, yang juga selalu mengirim m dari closure-nya).
+  let teamCode = '';
+  if (m && ev.hima_id) {
+    if (ev.hima_id === m.home_hima_id) teamCode = m.home_hima?.code;
+    else if (ev.hima_id === m.away_hima_id) teamCode = m.away_hima?.code;
+  }
+  const who = [ev.player_name, teamCode ? `(${teamCode})` : ''].filter(Boolean).join(' ');
   return `<div class="event-item">
     <span class="time">${t.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}</span>
-    <span>${EVENT_LABEL[ev.event_type] || ev.event_type}${ev.description ? ' — ' + ev.description : ''}</span>
+    <span>${EVENT_LABEL[ev.event_type] || ev.event_type}${who ? ' — ' + who : ''}${ev.description ? ' — ' + ev.description : ''}</span>
   </div>`;
 }
 
@@ -1076,6 +1088,17 @@ function adminControlsHTML(m) {
       </div>
     </div>
 
+    <div class="eyebrow" style="margin-top:14px;">Catat Kejadian</div>
+    <!-- Pilih tim & (opsional) nama pemain SEBELUM klik tombol kejadian di
+         bawah — nilainya dikirim bareng saat tombol diklik, lalu nama pemain
+         otomatis dikosongkan lagi supaya siap diisi untuk kejadian berikutnya. -->
+    <div class="event-recorder">
+      <select id="event-team-select">
+        <option value="${m.home_hima_id}">${m.home_hima.code}</option>
+        <option value="${m.away_hima_id}">${m.away_hima.code}</option>
+      </select>
+      <input type="text" id="event-player-input" placeholder="Nama pemain (opsional)" maxlength="80" />
+    </div>
     <div class="event-buttons">
       ${(SPORT_EVENT_BUTTONS[m.sport_type] || SPORT_EVENT_BUTTONS.default)
         .map((e) => `<button class="btn small" data-event="${e.type}">${e.label}</button>`).join('')}
@@ -1130,10 +1153,34 @@ function bindAdminControls(m) {
     });
   });
 
+  // Kejadian yang nama pemainnya penting dicatat (dipakai nanti untuk fitur
+  // statistik/top scorer) — untuk tipe ini nama pemain diwajibkan supaya
+  // datanya konsisten, bukan campur ada-nama/tidak-ada-nama.
+  const EVENTS_NEED_PLAYER = ['goal', 'yellow_card', 'red_card', 'substitution', 'free_throw'];
   document.querySelectorAll('[data-event]').forEach((btn) => {
     btn.addEventListener('click', async () => {
+      const teamSelect = document.getElementById('event-team-select');
+      const playerInput = document.getElementById('event-player-input');
+      const eventType = btn.dataset.event;
+      const playerName = playerInput ? playerInput.value.trim() : '';
+
+      if (EVENTS_NEED_PLAYER.includes(eventType) && !playerName) {
+        toast(`Isi dulu nama pemain sebelum mencatat "${EVENT_LABEL[eventType] || eventType}"`);
+        playerInput?.focus();
+        return;
+      }
+
       try {
-        await api(`/matches/${m.id}/events`, { method: 'POST', auth: true, body: { event_type: btn.dataset.event } });
+        await api(`/matches/${m.id}/events`, {
+          method: 'POST',
+          auth: true,
+          body: {
+            event_type: eventType,
+            hima_id: teamSelect ? teamSelect.value : null,
+            player_name: playerName || null,
+          },
+        });
+        if (playerInput) playerInput.value = '';
       } catch (err) { toast(err.message); }
     });
   });
@@ -1475,7 +1522,15 @@ route('/bagan', async ({ query }) => {
     (groups[key] = groups[key] || []).push(m);
   });
   const roundNames = Object.keys(groups).sort((a, b) => roundRank(a) - roundRank(b) || a.localeCompare(b));
-  roundNames.forEach((r) => groups[r].sort((a, b) => a.match_date.localeCompare(b.match_date)));
+  // Sama seperti pengurutan jadwal di backend: pertandingan yang belum
+  // punya waktu (match_date null, "To Be Announced") ditaruh paling
+  // belakang dalam babaknya, bukan bikin error localeCompare(null).
+  roundNames.forEach((r) => groups[r].sort((a, b) => {
+    if (!a.match_date && !b.match_date) return 0;
+    if (!a.match_date) return 1;
+    if (!b.match_date) return -1;
+    return a.match_date.localeCompare(b.match_date);
+  }));
   const roundsData = roundNames.map((r) => groups[r]);
 
   app.innerHTML = `
@@ -1853,12 +1908,20 @@ async function bindRegistrationPanel() {
   const listBox = document.getElementById('reg-list');
   const filterSelect = document.getElementById('reg-filter-sport');
   const exportBtn = document.getElementById('btn-export-reg');
+  const countLabel = document.getElementById('reg-count-label');
 
   async function loadRegistrations() {
     listBox.innerHTML = '<div class="empty-state">Memuat…</div>';
     try {
       const qs = filterSelect.value ? `?sport_type=${encodeURIComponent(filterSelect.value)}` : '';
       const rows = await api(`/registrations${qs}`, { auth: true });
+      // Tampilkan jumlah pendaftar di judul section (bahkan saat section-nya
+      // masih ditutup) supaya panitia tahu ada berapa banyak tanpa perlu
+      // buka dulu.
+      if (countLabel) {
+        const totalPlayers = rows.reduce((sum, r) => sum + (r.players?.length || 0), 0);
+        countLabel.textContent = `${rows.length} tim terdaftar · ${totalPlayers} atlet`;
+      }
       listBox.innerHTML = rows.length ? rows.map(registrationRowHTML).join('') : emptyState('Belum ada pendaftaran masuk.');
       listBox.querySelectorAll('[data-delete-reg]').forEach((btn) => {
         btn.addEventListener('click', async () => {
@@ -1981,112 +2044,184 @@ async function bindAthleteProfilePanel(himas) {
   select.addEventListener('change', loadRoster);
 }
 
+// ============================================================
+// Status buka/tutup tiap section di panel admin (lihat route('/admin', ...)
+// di bawah). Disimpan di luar fungsi route (bertahan selama sesi/tab
+// terbuka, bukan disimpan permanen) supaya begitu panitia submit form atau
+// hapus data — yang otomatis memanggil router() untuk render ulang seluruh
+// halaman admin — section yang tadinya sedang dibuka tidak ikut tertutup
+// lagi. "Tambah Pertandingan Baru" dibuka duluan (default) karena biasanya
+// itu aksi pertama yang dicari panitia; section berisi daftar panjang
+// (Data Registrasi Peserta, Semua Pertandingan) sengaja tertutup duluan
+// supaya halaman admin tidak langsung penuh scroll begitu pendaftar sudah
+// banyak.
+const ADMIN_OPEN_SECTIONS = {
+  'new-match': true,
+  'hima-profile': false,
+  'sport-limits': false,
+  'registrations': false,
+  'athlete-profile': false,
+  'all-matches': false,
+};
+
 route('/admin', async () => {
   if (!isAdmin()) { location.hash = '/login'; return; }
   const [matches, himas, sportConfig] = await Promise.all([api('/matches'), api('/himas?team_only=true'), api('/registrations/config')]);
   const himaOptions = himas.map((h) => `<option value="${h.id}">${h.code}</option>`).join('');
 
+  // Ikon panah bawah untuk penanda buka/tutup tiap section — dirotasi 180°
+  // lewat CSS (.admin-section[open] > summary .chevron) saat section terbuka.
+  const CHEVRON_ICON = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>';
+
+  // Section mana yang lagi dibuka/ditutup diingat di ADMIN_OPEN_SECTIONS
+  // (variabel module-level, lihat definisinya di luar route ini) — supaya
+  // tiap kali halaman admin di-render ulang (submit form, tambah/hapus
+  // data, dsb selalu memanggil router() lagi), section yang tadinya sudah
+  // dibuka panitia tidak ikut tertutup lagi.
+  const sectionOpen = (key) => (ADMIN_OPEN_SECTIONS[key] ? 'open' : '');
+
   app.innerHTML = `
     <div class="wrap">
       <div class="section-head"><div><div class="eyebrow">Panel Panitia</div><h2>Kelola Jadwal Pertandingan</h2></div></div>
 
-      <div class="admin-score-box">
-        <h3 style="margin-bottom:10px;">Tambah Pertandingan Baru</h3>
-        <form id="new-match-form" class="form-grid-2" style="gap:10px;">
-          <div class="filter-group"><label>Cabang Olahraga</label>
-            <select id="nm-sport"><option>Futsal</option><option>Basket</option><option>Voli</option><option>Badminton</option><option>E-Sport Mobile Legends</option></select>
-          </div>
-          <div class="filter-group"><label>Ronde</label><input id="nm-round" placeholder="Penyisihan Grup A" /></div>
-          <div class="filter-group"><label>Tim Tuan Rumah</label><select id="nm-home">${himaOptions}</select></div>
-          <div class="filter-group"><label>Tim Tamu</label><select id="nm-away">${himaOptions}</select></div>
-          <div class="filter-group"><label>Tanggal &amp; Waktu</label><input type="datetime-local" id="nm-date" required /></div>
-          <div class="filter-group"><label>Venue</label><input id="nm-venue" placeholder="Lapangan Futsal FST A" /></div>
-          <button class="btn primary" type="submit" style="grid-column:1/-1;">+ Tambah ke Jadwal</button>
-        </form>
-      </div>
-
-      <div class="admin-score-box">
-        <h3 style="margin-bottom:10px;">Kelola Profil HIMA</h3>
-        <div class="filter-group" style="margin-bottom:10px;">
-          <label>Pilih HIMA</label>
-          <select id="hp-select">${himas.map((h) => `<option value="${h.id}">${h.code} — ${h.full_name}</option>`).join('')}</select>
+      <details class="admin-score-box admin-section" data-section-key="new-match" ${sectionOpen('new-match')}>
+        <summary>
+          <div class="admin-section-title">Tambah Pertandingan Baru<small>Buat jadwal baru untuk salah satu cabor</small></div>
+          <span class="chevron">${CHEVRON_ICON}</span>
+        </summary>
+        <div class="admin-section-body">
+          <form id="new-match-form" class="form-grid-2" style="gap:10px;">
+            <div class="filter-group"><label>Cabang Olahraga</label>
+              <select id="nm-sport"><option>Futsal</option><option>Basket</option><option>Voli</option><option>Badminton</option><option>E-Sport Mobile Legends</option></select>
+            </div>
+            <div class="filter-group"><label>Ronde</label><input id="nm-round" placeholder="Penyisihan Grup A" /></div>
+            <div class="filter-group"><label>Tim Tuan Rumah</label><select id="nm-home">${himaOptions}</select></div>
+            <div class="filter-group"><label>Tim Tamu</label><select id="nm-away">${himaOptions}</select></div>
+            <div class="filter-group"><label>Tanggal &amp; Waktu <span class="mc-meta" style="font-weight:400;">(opsional — kosongkan jika belum pasti, akan tampil "To Be Announced")</span></label><input type="datetime-local" id="nm-date" /></div>
+            <div class="filter-group"><label>Venue</label><input id="nm-venue" placeholder="Lapangan Futsal FST A" /></div>
+            <button class="btn primary" type="submit" style="grid-column:1/-1;">+ Tambah ke Jadwal</button>
+          </form>
         </div>
-        <form id="hima-profile-form" style="display:grid; gap:10px;">
-          <div class="filter-group"><label>Deskripsi</label><textarea id="hp-description" rows="6" style="width:100%; font-family:inherit; padding:10px; border:1px solid var(--line); border-radius:6px; background:var(--paper-light);"></textarea></div>
-          <div class="form-grid-2">
-            <div class="filter-group"><label>Email</label><input id="hp-email" type="email" /></div>
-            <div class="filter-group"><label>Instagram</label><input id="hp-instagram" placeholder="@namahima" /></div>
-          </div>
-          <div class="filter-group"><label>URL Logo</label><input id="hp-logo" placeholder="assets/logos/kode.svg" /></div>
-          <button class="btn primary" type="submit">Simpan Profil HIMA</button>
-        </form>
-      </div>
+      </details>
 
-      <div class="admin-score-box">
-        <h3 style="margin-bottom:4px;">Pengaturan Jumlah Peserta per Cabor</h3>
-        <p class="mc-meta" style="margin:0 0 14px;">Atur sendiri minimal &amp; maksimal jumlah peserta tiap cabor (mis. Badminton 2–4 orang termasuk cadangan). Untuk cabor yang tiap kategorinya beda jumlah peserta (mis. E-Sport), atur per kategori di bawahnya. Perubahan langsung berlaku di form pendaftaran, tanpa perlu deploy ulang.</p>
-        <div id="sport-limits-list" style="display:grid; gap:10px;">
-          ${Object.entries(sportConfig).map(([sport, cfg]) => {
-            if (cfg.categoryPlayers) {
-              // Cabor dengan jumlah peserta berbeda tiap kategori (mis. E-Sport:
-              // Mobile Legends 5–7 vs FIFA 1–2) — satu baris pengaturan PER KATEGORI,
-              // supaya ubah satu kategori tidak ikut mengubah kategori lain.
+      <details class="admin-score-box admin-section" data-section-key="hima-profile" ${sectionOpen('hima-profile')}>
+        <summary>
+          <div class="admin-section-title">Kelola Profil HIMA<small>Deskripsi, kontak, dan logo tiap HIMA</small></div>
+          <span class="chevron">${CHEVRON_ICON}</span>
+        </summary>
+        <div class="admin-section-body">
+          <div class="filter-group" style="margin-bottom:10px;">
+            <label>Pilih HIMA</label>
+            <select id="hp-select">${himas.map((h) => `<option value="${h.id}">${h.code} — ${h.full_name}</option>`).join('')}</select>
+          </div>
+          <form id="hima-profile-form" style="display:grid; gap:10px;">
+            <div class="filter-group"><label>Deskripsi</label><textarea id="hp-description" rows="6" style="width:100%; font-family:inherit; padding:10px; border:1px solid var(--line); border-radius:6px; background:var(--paper-light);"></textarea></div>
+            <div class="form-grid-2">
+              <div class="filter-group"><label>Email</label><input id="hp-email" type="email" /></div>
+              <div class="filter-group"><label>Instagram</label><input id="hp-instagram" placeholder="@namahima" /></div>
+            </div>
+            <div class="filter-group"><label>URL Logo</label><input id="hp-logo" placeholder="assets/logos/kode.svg" /></div>
+            <button class="btn primary" type="submit">Simpan Profil HIMA</button>
+          </form>
+        </div>
+      </details>
+
+      <details class="admin-score-box admin-section" data-section-key="sport-limits" ${sectionOpen('sport-limits')}>
+        <summary>
+          <div class="admin-section-title">Pengaturan Jumlah Peserta per Cabor<small>Minimal &amp; maksimal pemain tiap cabor/kategori</small></div>
+          <span class="chevron">${CHEVRON_ICON}</span>
+        </summary>
+        <div class="admin-section-body">
+          <p class="mc-meta" style="margin:0 0 14px;">Atur sendiri minimal &amp; maksimal jumlah peserta tiap cabor (mis. Badminton 2–4 orang termasuk cadangan). Untuk cabor yang tiap kategorinya beda jumlah peserta (mis. E-Sport), atur per kategori di bawahnya. Perubahan langsung berlaku di form pendaftaran, tanpa perlu deploy ulang.</p>
+          <div id="sport-limits-list" style="display:grid; gap:10px;">
+            ${Object.entries(sportConfig).map(([sport, cfg]) => {
+              if (cfg.categoryPlayers) {
+                // Cabor dengan jumlah peserta berbeda tiap kategori (mis. E-Sport:
+                // Mobile Legends 5–7 vs FIFA 1–2) — satu baris pengaturan PER KATEGORI,
+                // supaya ubah satu kategori tidak ikut mengubah kategori lain.
+                return `
+                  <div style="padding:10px; border:1px solid var(--line); border-radius:8px;">
+                    <label>${SPORT_CONFIG[sport]?.icon || ''} ${sport}</label>
+                    <div style="display:grid; gap:8px; margin-top:8px;">
+                      ${cfg.categories.map((cat) => {
+                        const lim = cfg.categoryPlayers[cat] || { min: cfg.minPlayers, max: cfg.maxPlayers };
+                        const key = `${sport}|||${cat}`;
+                        return `
+                          <div class="sport-limit-row" data-sport-limit-row="${key}" style="display:grid; grid-template-columns:1.4fr .7fr .7fr auto; gap:10px; align-items:end;">
+                            <div><label style="font-weight:normal;">↳ ${cat}</label></div>
+                            <div><label>Minimal</label><input type="number" min="1" data-sl-min value="${lim.min}" /></div>
+                            <div><label>Maksimal</label><input type="number" min="1" data-sl-max value="${lim.max}" /></div>
+                            <button type="button" class="btn small primary" data-sl-save="${key}" data-sl-sport="${sport}" data-sl-category="${cat}">Simpan</button>
+                          </div>`;
+                      }).join('')}
+                    </div>
+                  </div>`;
+              }
               return `
-                <div style="padding:10px; border:1px solid var(--line); border-radius:8px;">
-                  <label>${SPORT_CONFIG[sport]?.icon || ''} ${sport}</label>
-                  <div style="display:grid; gap:8px; margin-top:8px;">
-                    ${cfg.categories.map((cat) => {
-                      const lim = cfg.categoryPlayers[cat] || { min: cfg.minPlayers, max: cfg.maxPlayers };
-                      const key = `${sport}|||${cat}`;
-                      return `
-                        <div class="sport-limit-row" data-sport-limit-row="${key}" style="display:grid; grid-template-columns:1.4fr .7fr .7fr auto; gap:10px; align-items:end;">
-                          <div><label style="font-weight:normal;">↳ ${cat}</label></div>
-                          <div><label>Minimal</label><input type="number" min="1" data-sl-min value="${lim.min}" /></div>
-                          <div><label>Maksimal</label><input type="number" min="1" data-sl-max value="${lim.max}" /></div>
-                          <button type="button" class="btn small primary" data-sl-save="${key}" data-sl-sport="${sport}" data-sl-category="${cat}">Simpan</button>
-                        </div>`;
-                    }).join('')}
-                  </div>
-                </div>`;
-            }
-            return `
-            <div class="filter-group sport-limit-row" data-sport-limit-row="${sport}" style="display:grid; grid-template-columns:1.4fr .7fr .7fr auto; gap:10px; align-items:end; padding:10px; border:1px solid var(--line); border-radius:8px;">
-              <div><label>${SPORT_CONFIG[sport]?.icon || ''} ${sport}</label><p class="mc-meta" style="margin:2px 0 0;">Kategori: ${cfg.categories.join(', ')}</p></div>
-              <div><label>Minimal</label><input type="number" min="1" data-sl-min value="${cfg.minPlayers}" /></div>
-              <div><label>Maksimal</label><input type="number" min="1" data-sl-max value="${cfg.maxPlayers}" /></div>
-              <button type="button" class="btn small primary" data-sl-save="${sport}" data-sl-sport="${sport}">Simpan</button>
-            </div>`;
-          }).join('')}
-        </div>
-      </div>
-
-      <div class="admin-score-box">
-        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:10px;">
-          <h3>Data Registrasi Peserta</h3>
-          <div style="display:flex; gap:8px; align-items:center;">
-            <select id="reg-filter-sport" style="padding:6px 10px; border-radius:6px; border:1px solid var(--line); background:var(--paper-light); color:var(--ink);">
-              <option value="">Semua Cabang</option>
-              ${Object.keys(SPORT_CONFIG).map((s) => `<option value="${s}">${s}</option>`).join('')}
-            </select>
-            <button class="btn small primary" id="btn-export-reg">⬇ Unduh Excel</button>
+              <div class="filter-group sport-limit-row" data-sport-limit-row="${sport}" style="display:grid; grid-template-columns:1.4fr .7fr .7fr auto; gap:10px; align-items:end; padding:10px; border:1px solid var(--line); border-radius:8px;">
+                <div><label>${SPORT_CONFIG[sport]?.icon || ''} ${sport}</label><p class="mc-meta" style="margin:2px 0 0;">Kategori: ${cfg.categories.join(', ')}</p></div>
+                <div><label>Minimal</label><input type="number" min="1" data-sl-min value="${cfg.minPlayers}" /></div>
+                <div><label>Maksimal</label><input type="number" min="1" data-sl-max value="${cfg.maxPlayers}" /></div>
+                <button type="button" class="btn small primary" data-sl-save="${sport}" data-sl-sport="${sport}">Simpan</button>
+              </div>`;
+            }).join('')}
           </div>
         </div>
-        <div id="reg-list"><div class="empty-state">Memuat…</div></div>
-      </div>
+      </details>
 
-      <div class="admin-score-box">
-        <h3 style="margin-bottom:4px;">Kelola Profil Atlet</h3>
-        <p class="mc-meta" style="margin:0 0 14px;">Nama &amp; NIM atlet di sini otomatis diambil dari data pendaftaran per cabor. Kalau ada atlet yang mengundurkan diri atau salah input, tinggal edit/hapus langsung dari sini — tidak perlu ubah data pendaftaran atau kode. Perubahan langsung muncul di halaman profil HIMA.</p>
-        <div class="filter-group" style="margin-bottom:10px;">
-          <label>Pilih HIMA</label>
-          <select id="pa-select">${himas.map((h) => `<option value="${h.id}">${h.code} — ${h.full_name}</option>`).join('')}</select>
+      <details class="admin-score-box admin-section" data-section-key="registrations" ${sectionOpen('registrations')}>
+        <summary>
+          <div class="admin-section-title">Data Registrasi Peserta<small id="reg-count-label">Daftar tim &amp; pemain yang mendaftar per cabor</small></div>
+          <span class="chevron">${CHEVRON_ICON}</span>
+        </summary>
+        <div class="admin-section-body">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:10px;">
+            <div style="display:flex; gap:8px; align-items:center;">
+              <select id="reg-filter-sport" style="padding:6px 10px; border-radius:6px; border:1px solid var(--line); background:var(--paper-light); color:var(--ink);">
+                <option value="">Semua Cabang</option>
+                ${Object.keys(SPORT_CONFIG).map((s) => `<option value="${s}">${s}</option>`).join('')}
+              </select>
+              <button class="btn small primary" id="btn-export-reg">⬇ Unduh Excel</button>
+            </div>
+          </div>
+          <div id="reg-list"><div class="empty-state">Memuat…</div></div>
         </div>
-        <div id="pa-roster"><div class="empty-state">Memuat…</div></div>
-      </div>
+      </details>
 
-      <div class="section-head"><h2 style="font-size:1.2rem;">Semua Pertandingan</h2></div>
-      <div class="match-list">${matches.length ? matches.map(adminMatchCardHTML).join('') : emptyState('Belum ada pertandingan.')}</div>
+      <details class="admin-score-box admin-section" data-section-key="athlete-profile" ${sectionOpen('athlete-profile')}>
+        <summary>
+          <div class="admin-section-title">Kelola Profil Atlet<small>Edit/hapus nama &amp; NIM atlet per HIMA</small></div>
+          <span class="chevron">${CHEVRON_ICON}</span>
+        </summary>
+        <div class="admin-section-body">
+          <p class="mc-meta" style="margin:0 0 14px;">Nama &amp; NIM atlet di sini otomatis diambil dari data pendaftaran per cabor. Kalau ada atlet yang mengundurkan diri atau salah input, tinggal edit/hapus langsung dari sini — tidak perlu ubah data pendaftaran atau kode. Perubahan langsung muncul di halaman profil HIMA.</p>
+          <div class="filter-group" style="margin-bottom:10px;">
+            <label>Pilih HIMA</label>
+            <select id="pa-select">${himas.map((h) => `<option value="${h.id}">${h.code} — ${h.full_name}</option>`).join('')}</select>
+          </div>
+          <div id="pa-roster"><div class="empty-state">Memuat…</div></div>
+        </div>
+      </details>
+
+      <details class="admin-score-box admin-section" data-section-key="all-matches" ${sectionOpen('all-matches')}>
+        <summary>
+          <div class="admin-section-title">Semua Pertandingan<small>${matches.length} pertandingan terjadwal</small></div>
+          <span class="chevron">${CHEVRON_ICON}</span>
+        </summary>
+        <div class="admin-section-body">
+          <div class="match-list">${matches.length ? matches.map(adminMatchCardHTML).join('') : emptyState('Belum ada pertandingan.')}</div>
+        </div>
+      </details>
     </div>`;
+
+  // Ingat status buka/tutup tiap section setiap kali panitia klik
+  // summary-nya, supaya bertahan lewat re-render berikutnya (lihat
+  // sectionOpen() di atas).
+  document.querySelectorAll('.admin-section').forEach((el) => {
+    el.addEventListener('toggle', () => {
+      ADMIN_OPEN_SECTIONS[el.dataset.sectionKey] = el.open;
+    });
+  });
 
   bindDeleteMatchButtons();
   bindRegistrationPanel();
@@ -2157,7 +2292,12 @@ route('/admin', async () => {
           round_name: document.getElementById('nm-round').value,
           home_hima_id: document.getElementById('nm-home').value,
           away_hima_id: document.getElementById('nm-away').value,
-          match_date: document.getElementById('nm-date').value.replace('T', ' '),
+          // Field waktu boleh dikosongkan (jadwal "To Be Announced") — kirim
+          // null, bukan string kosong, supaya konsisten dengan yang dibaca
+          // backend & fmtDate() di frontend.
+          match_date: document.getElementById('nm-date').value
+            ? document.getElementById('nm-date').value.replace('T', ' ')
+            : null,
           venue: document.getElementById('nm-venue').value,
         },
       });

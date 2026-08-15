@@ -260,13 +260,18 @@ router.patch('/:id/timer', requireAuth, requireAdmin, (req, res) => {
 
 // Tambah catatan kejadian (gol, kartu, pergantian pemain, pelanggaran basket, dll)
 router.post('/:id/events', requireAuth, requireAdmin, (req, res) => {
-  const { event_type, minute, description, hima_id } = req.body;
+  const { event_type, minute, description, hima_id, player_name } = req.body;
   if (!event_type) return res.status(400).json({ message: 'Jenis kejadian wajib diisi' });
 
   const match = db.matches.find((m) => m.id === req.params.id);
   if (!match) return res.status(404).json({ message: 'Pertandingan tidak ditemukan' });
   if (!canManageSport(req.user, match.sport_type)) {
     return res.status(403).json({ message: `Akun Anda tidak diizinkan mengelola cabor ${match.sport_type}` });
+  }
+  // hima_id (kalau diisi) wajib salah satu dari 2 tim yang sedang bertanding,
+  // supaya nama pemain/kejadian tidak bisa "nyasar" ke HIMA yang tidak main.
+  if (hima_id && hima_id !== match.home_hima_id && hima_id !== match.away_hima_id) {
+    return res.status(400).json({ message: 'Tim yang dipilih bukan bagian dari pertandingan ini' });
   }
 
   const event = {
@@ -275,6 +280,10 @@ router.post('/:id/events', requireAuth, requireAdmin, (req, res) => {
     hima_id: hima_id || null,
     event_type,
     minute: minute || null,
+    // Nama pemain yang terlibat (mencetak gol, kena kartu, dll) — field
+    // terpisah dari `description` supaya tetap terstruktur dan bisa dipakai
+    // untuk fitur statistik/top scorer di kemudian hari tanpa perlu parsing teks.
+    player_name: (player_name || '').trim() || null,
     description: description || null,
     created_by: req.user.id,
     created_at: nowStr(),
