@@ -7,6 +7,11 @@ import { fileURLToPath } from 'url';
 import { db, save, nowStr } from '../db.js';
 import { requireAuth, requireAdmin, canManageSport } from '../middleware/auth.js';
 import { notifyHimaFollowers } from '../lib/push.js';
+// Daftar kategori valid per cabor dipakai ulang dari konfigurasi pendaftaran
+// (registrations.js) — supaya kategori pertandingan (mis. "Putra"/"Putri")
+// selalu konsisten dengan kategori yang dipakai saat tim mendaftar, tidak
+// perlu didefinisikan dua kali di dua tempat berbeda.
+import { SPORT_CONFIG } from './registrations.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const router = Router();
@@ -18,6 +23,10 @@ function attachHimas(match) {
   const away = db.himas.find((h) => h.id === match.away_hima_id);
   return {
     ...match,
+    // Pertandingan yang dibuat sebelum fitur kategori ditambahkan tidak
+    // punya field ini di data lama — fallback ke null supaya frontend tidak
+    // perlu jaga-jaga terpisah untuk data lama vs baru.
+    category: match.category ?? null,
     home_babak: match.home_babak ?? 0,
     away_babak: match.away_babak ?? 0,
     live_started_at: match.live_started_at ?? null,
@@ -54,13 +63,14 @@ function getRemainingMs(match) {
   return Math.max(0, remainingSec * 1000);
 }
 
-// GET jadwal dengan filter ?hima=&date=YYYY-MM-DD&status=
+// GET jadwal dengan filter ?hima=&date=YYYY-MM-DD&status=&sport_type=&category=
 router.get('/', (req, res) => {
-  const { hima, date, status, sport_type } = req.query;
+  const { hima, date, status, sport_type, category } = req.query;
   let rows = [...db.matches];
 
   if (status) rows = rows.filter((m) => m.status === status);
   if (sport_type) rows = rows.filter((m) => m.sport_type === sport_type);
+  if (category) rows = rows.filter((m) => m.category === category);
   // match_date bisa null (jadwal "To Be Announced" — waktunya belum diset),
   // jadi jangan panggil .slice() langsung ke null; anggap tidak match filter
   // tanggal manapun kalau memang belum ada waktunya.
@@ -97,7 +107,7 @@ router.get('/:id', (req, res) => {
 
 // Buat jadwal baru (admin)
 router.post('/', requireAuth, requireAdmin, (req, res) => {
-  const { sport_type, home_hima_id, away_hima_id, venue, match_date, round_name } = req.body;
+  const { sport_type, category, home_hima_id, away_hima_id, venue, match_date, round_name } = req.body;
   // match_date sengaja TIDAK diwajibkan — kalau admin belum menentukan
   // waktunya, jadwal tetap bisa dibuat dan otomatis tampil sebagai
   // "To Be Announced" di frontend (lihat fmtDate() di app.js) sampai
@@ -108,10 +118,26 @@ router.post('/', requireAuth, requireAdmin, (req, res) => {
   if (!canManageSport(req.user, sport_type)) {
     return res.status(403).json({ message: `Akun Anda tidak diizinkan mengelola cabor ${sport_type}` });
   }
+  // Kategori wajib diisi untuk cabor yang punya lebih dari satu kategori
+  // (mis. Futsal Putra/Putri) — supaya jadwal & klasemen tidak campur aduk
+  // antar kategori. Untuk cabor yang cuma punya 1 kategori, boleh dikosongkan.
+  const validCategories = SPORT_CONFIG[sport_type]?.categories || [];
+  if (validCategories.length > 1) {
+    if (!category) {
+      return res.status(400).json({ message: `Kategori wajib diisi untuk ${sport_type} (pilih salah satu: ${validCategories.join(', ')})` });
+    }
+    if (!validCategories.includes(category)) {
+      return res.status(400).json({ message: `Kategori "${category}" tidak dikenal untuk ${sport_type}. Pilihan yang tersedia: ${validCategories.join(', ')}` });
+    }
+  }
 
   const match = {
     id: uuid(),
     sport_type,
+    // Kalau cabornya cuma punya 1 kategori (mis. tidak ada kelas Putra/Putri
+    // terpisah), simpan kategori tunggal itu otomatis supaya field ini tetap
+    // konsisten terisi di semua pertandingan, bukan cuma yang punya >1 kategori.
+    category: category || validCategories[0] || null,
     home_hima_id,
     away_hima_id,
     home_score: 0,
@@ -285,13 +311,18 @@ router.patch('/:id/timer', requireAuth, requireAdmin, (req, res) => {
 
 // Tambah catatan kejadian (gol, kartu, pergantian pemain, pelanggaran basket, dll)
 router.post('/:id/events', requireAuth, requireAdmin, (req, res) => {
-  const { event_type, minute, description, hima_id } = req.body;
+  const { event_type, minute, description, hima_id, player_name } = req.body;
   if (!event_type) return res.status(400).json({ message: 'Jenis kejadian wajib diisi' });
 
   const match = db.matches.find((m) => m.id === req.params.id);
   if (!match) return res.status(404).json({ message: 'Pertandingan tidak ditemukan' });
   if (!canManageSport(req.user, match.sport_type)) {
     return res.status(403).json({ message: `Akun Anda tidak diizinkan mengelola cabor ${match.sport_type}` });
+  }
+  // hima_id (kalau diisi) wajib salah satu dari 2 tim yang sedang bertanding,
+  // supaya nama pemain/kejadian tidak bisa "nyasar" ke HIMA yang tidak main.
+  if (hima_id && hima_id !== match.home_hima_id && hima_id !== match.away_hima_id) {
+    return res.status(400).json({ message: 'Tim yang dipilih bukan bagian dari pertandingan ini' });
   }
 
   const event = {
@@ -300,6 +331,10 @@ router.post('/:id/events', requireAuth, requireAdmin, (req, res) => {
     hima_id: hima_id || null,
     event_type,
     minute: minute || null,
+    // Nama pemain yang terlibat (mencetak gol, kena kartu, dll) — field
+    // terpisah dari `description` supaya tetap terstruktur dan bisa dipakai
+    // untuk fitur statistik/top scorer di kemudian hari tanpa perlu parsing teks.
+    player_name: (player_name || '').trim() || null,
     description: description || null,
     created_by: req.user.id,
     created_at: nowStr(),

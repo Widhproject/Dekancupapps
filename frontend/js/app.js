@@ -642,6 +642,18 @@ route('/jadwal', async ({ query }) => {
       </div>
     </section>` : heroHTML();
 
+  // Opsi Kategori mengikuti cabor yang dipilih di filter Cabang Olahraga —
+  // sama seperti di form Tambah Pertandingan & halaman Bagan (SPORT_CONFIG).
+  // Kalau "Semua Cabor" dipilih, gabungkan semua kategori dari semua cabor
+  // olahraga (tetap berguna, mis. cari semua pertandingan kategori "Putri"
+  // lintas cabor).
+  const categoriesFor = (sportValue) => {
+    if (sportValue) return SPORT_CONFIG[sportValue]?.categories || [];
+    const all = new Set();
+    SPORT_TYPES.forEach((s) => (SPORT_CONFIG[s]?.categories || []).forEach((c) => all.add(c)));
+    return [...all];
+  };
+
   app.innerHTML = `
     ${heroSection}
     <div class="wrap">
@@ -654,6 +666,13 @@ route('/jadwal', async ({ query }) => {
           <select id="f-sport"><option value="">Semua</option>${SPORT_TYPES.map((s) => `<option value="${s}" ${query.sport_type === s ? 'selected' : ''}>${s}</option>`).join('')}</select>
         </div>
         <div class="filter-group">
+          <label>Kategori</label>
+          <select id="f-category">
+            <option value="">Semua</option>
+            ${categoriesFor(query.sport_type).map((c) => `<option value="${c}" ${query.category === c ? 'selected' : ''}>${c}</option>`).join('')}
+          </select>
+        </div>
+        <div class="filter-group">
           <label>HIMA</label>
           <select id="f-hima"><option value="">Semua</option>${himaOptions}</select>
         </div>
@@ -664,16 +683,27 @@ route('/jadwal', async ({ query }) => {
 
   document.getElementById('f-hima').value = query.hima || '';
   document.getElementById('f-sport').value = query.sport_type || '';
+  document.getElementById('f-category').value = query.category || '';
 
   const applyFilter = () => {
     const params = new URLSearchParams();
     const hima = document.getElementById('f-hima').value;
     const sport = document.getElementById('f-sport').value;
+    const category = document.getElementById('f-category').value;
     if (hima) params.set('hima', hima);
     if (sport) params.set('sport_type', sport);
+    if (category) params.set('category', category);
     location.hash = `/jadwal?${params.toString()}`;
   };
-  ['f-hima', 'f-sport'].forEach((id) => document.getElementById(id).addEventListener('change', applyFilter));
+  document.getElementById('f-sport').addEventListener('change', (e) => {
+    // Ganti cabor → opsi Kategori dibangun ulang mengikuti cabor barunya,
+    // lalu reset ke "Semua" karena kategori lama belum tentu berlaku lagi
+    // untuk cabor yang baru dipilih.
+    const catSelect = document.getElementById('f-category');
+    catSelect.innerHTML = `<option value="">Semua</option>${categoriesFor(e.target.value).map((c) => `<option value="${c}">${c}</option>`).join('')}`;
+    applyFilter();
+  });
+  ['f-hima', 'f-category'].forEach((id) => document.getElementById(id).addEventListener('change', applyFilter));
 
   // Live tampil sebagai hero di atas saja (tidak dobel di list bawah).
   // Yang sudah selesai tidak ditampilkan di halaman ini lagi — otomatis
@@ -735,7 +765,7 @@ function matchCardHTML(m) {
         <div class="mc-score">${m.home_score} <span class="mc-vs">–</span> ${m.away_score}</div>
         <div class="mc-team">${m.away_hima.code} <img src="${m.away_hima.logo_url}" onerror="this.src='assets/logos/_placeholder.svg'"/></div>
       </div>
-      <div class="mc-meta">${m.sport_type} · ${m.round_name || ''} · ${fmtDate(m.match_date)} · ${m.venue || 'Venue belum ditentukan'}</div>
+      <div class="mc-meta">${m.sport_type}${m.category ? ' · ' + m.category : ''} · ${m.round_name || ''} · ${fmtDate(m.match_date)} · ${m.venue || 'Venue belum ditentukan'}</div>
     </div>
     <div class="mc-status">${statusBadge(m.status)}</div>
   </a>`;
@@ -746,7 +776,7 @@ function liveSpotlightCardHTML(m) {
   <a class="spotlight-card" href="#/match/${m.id}" data-match-id="${m.id}">
     <div class="spotlight-top">
       ${statusBadge(m.status)}
-      <span class="spotlight-meta">${m.sport_type}${m.round_name ? ' · ' + m.round_name : ''}</span>
+      <span class="spotlight-meta">${m.sport_type}${m.category ? ' · ' + m.category : ''}${m.round_name ? ' · ' + m.round_name : ''}</span>
     </div>
     <div class="spotlight-teams">
       <div class="spotlight-team">
@@ -900,7 +930,7 @@ route('/match/:id', async ({ params }) => {
   app.innerHTML = `
     <div class="wrap">
       <div class="scorecard">
-        <div class="round">${m.sport_type} · ${m.round_name || '-'}</div>
+        <div class="round">${m.sport_type}${m.category ? ' · ' + m.category : ''} · ${m.round_name || '-'}</div>
         ${statusBadge(m.status)}
         <div class="score-row" style="margin-top:14px;">
           <div class="score-team">
@@ -1513,7 +1543,13 @@ function bracketColumnMatchesHTML(roundMatches, roundIdx) {
 
 route('/bagan', async ({ query }) => {
   const sport = query.sport || 'Futsal';
-  const matches = await api(`/matches?sport_type=${encodeURIComponent(sport)}`);
+  // Kategori (mis. Putra/Putri) dipilih terpisah dari cabor — kalau belum
+  // dipilih lewat URL, pakai kategori pertama yang tersedia untuk cabor ini
+  // (lihat SPORT_CONFIG). Ini mencegah bagan mencampur pertandingan Putra &
+  // Putri jadi satu pohon turnamen yang sama.
+  const availableCategories = SPORT_CONFIG[sport]?.categories || [];
+  const category = availableCategories.includes(query.category) ? query.category : (availableCategories[0] || '');
+  const matches = await api(`/matches?${new URLSearchParams({ sport_type: sport, ...(category ? { category } : {}) }).toString()}`);
 
   // Kelompokkan per nama babak, lalu urutkan babaknya dari penyisihan -> final.
   const groups = {};
@@ -1536,13 +1572,20 @@ route('/bagan', async ({ query }) => {
   app.innerHTML = `
     <div class="wrap">
       <div class="section-head">
-        <div><div class="eyebrow">Bagan Pertandingan · Sistem Gugur</div><h2>${sport}</h2></div>
+        <div><div class="eyebrow">Bagan Pertandingan · Sistem Gugur</div><h2>${sport}${category ? ' · ' + category : ''}</h2></div>
         <div class="filter-group">
           <label>Cabang Olahraga</label>
           <select id="sport-select">
             ${SPORT_TYPES.map((s) => `<option ${s === sport ? 'selected' : ''}>${s}</option>`).join('')}
           </select>
         </div>
+        ${availableCategories.length > 1 ? `
+        <div class="filter-group">
+          <label>Kategori</label>
+          <select id="category-select">
+            ${availableCategories.map((c) => `<option ${c === category ? 'selected' : ''}>${c}</option>`).join('')}
+          </select>
+        </div>` : ''}
       </div>
       ${roundNames.length ? `
       <div class="bracket-board" id="bracket-board">
@@ -1562,8 +1605,16 @@ route('/bagan', async ({ query }) => {
     </div>`;
 
   document.getElementById('sport-select').addEventListener('change', (e) => {
+    // Ganti cabor → kategori ikut direset ke default (kategori pertama cabor
+    // baru itu), karena daftar kategori tiap cabor berbeda-beda.
     location.hash = `/bagan?sport=${encodeURIComponent(e.target.value)}`;
   });
+  const categorySelect = document.getElementById('category-select');
+  if (categorySelect) {
+    categorySelect.addEventListener('change', (e) => {
+      location.hash = `/bagan?sport=${encodeURIComponent(sport)}&category=${encodeURIComponent(e.target.value)}`;
+    });
+  }
 
   if (roundNames.length) {
     const redraw = () => drawBracketConnectors(roundsData);
@@ -2094,6 +2145,9 @@ route('/admin', async () => {
             <div class="filter-group"><label>Cabang Olahraga</label>
               <select id="nm-sport"><option>Futsal</option><option>Basket</option><option>Voli</option><option>Badminton</option><option>E-Sport Mobile Legends</option></select>
             </div>
+            <div class="filter-group"><label>Kategori</label>
+              <select id="nm-category"></select>
+            </div>
             <div class="filter-group"><label>Ronde</label><input id="nm-round" placeholder="Penyisihan Grup A" /></div>
             <div class="filter-group"><label>Tim Tuan Rumah</label><select id="nm-home">${himaOptions}</select></div>
             <div class="filter-group"><label>Tim Tamu</label><select id="nm-away">${himaOptions}</select></div>
@@ -2282,6 +2336,19 @@ route('/admin', async () => {
     } catch (err) { toast(err.message); }
   });
 
+  // Opsi Kategori mengikuti cabor yang dipilih (mis. Futsal → Putra/Putri,
+  // Badminton → Ganda Putra/Ganda Putri/Campuran) — diambil dari SPORT_CONFIG
+  // yang sama dipakai formulir pendaftaran, supaya penamaan kategori selalu
+  // konsisten antara jadwal pertandingan & data pendaftaran tim.
+  const nmSportSelect = document.getElementById('nm-sport');
+  const nmCategorySelect = document.getElementById('nm-category');
+  const refreshCategoryOptions = () => {
+    const categories = SPORT_CONFIG[nmSportSelect.value]?.categories || [];
+    nmCategorySelect.innerHTML = categories.map((c) => `<option value="${c}">${c}</option>`).join('');
+  };
+  refreshCategoryOptions();
+  nmSportSelect.addEventListener('change', refreshCategoryOptions);
+
   document.getElementById('new-match-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     try {
@@ -2289,6 +2356,7 @@ route('/admin', async () => {
         method: 'POST', auth: true,
         body: {
           sport_type: document.getElementById('nm-sport').value,
+          category: document.getElementById('nm-category').value,
           round_name: document.getElementById('nm-round').value,
           home_hima_id: document.getElementById('nm-home').value,
           away_hima_id: document.getElementById('nm-away').value,

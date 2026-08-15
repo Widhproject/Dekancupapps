@@ -188,9 +188,10 @@ function seed() {
       return d;
     };
 
-    const makeMatch = (sport_type, home, away, home_score, away_score, venue, hoursOffset, status, round_name) => ({
+    const makeMatch = (sport_type, category, home, away, home_score, away_score, venue, hoursOffset, status, round_name) => ({
       id: uuid(),
       sport_type,
+      category,
       home_hima_id: getHimaId(home),
       away_hima_id: getHimaId(away),
       home_score,
@@ -207,10 +208,10 @@ function seed() {
       updated_at: nowStr(),
     });
 
-    db.matches.push(makeMatch('Futsal', 'HIMAKI', 'HIMASTA', 2, 1, 'Lapangan Futsal FST A', -1, 'live', 'Penyisihan Grup A'));
-    db.matches.push(makeMatch('Basket', 'HIMATIKA', 'HIMSI', 0, 0, 'GOR FST', 2, 'scheduled', 'Penyisihan Grup B'));
-    db.matches.push(makeMatch('Voli', 'HMTL', 'HMTB', 0, 0, 'Lapangan Voli FST', 5, 'scheduled', 'Penyisihan Grup A'));
-    db.matches.push(makeMatch('Futsal', 'HIMAFI', 'HIMBIO', 3, 2, 'Lapangan Futsal FST B', -26, 'finished', 'Penyisihan Grup B'));
+    db.matches.push(makeMatch('Futsal', 'Putra', 'HIMAKI', 'HIMASTA', 2, 1, 'Lapangan Futsal FST A', -1, 'live', 'Penyisihan Grup A'));
+    db.matches.push(makeMatch('Basket', 'Putra', 'HIMATIKA', 'HIMSI', 0, 0, 'GOR FST', 2, 'scheduled', 'Penyisihan Grup B'));
+    db.matches.push(makeMatch('Voli', 'Putri', 'HMTL', 'HMTB', 0, 0, 'Lapangan Voli FST', 5, 'scheduled', 'Penyisihan Grup A'));
+    db.matches.push(makeMatch('Futsal', 'Putra', 'HIMAFI', 'HIMBIO', 3, 2, 'Lapangan Futsal FST B', -26, 'finished', 'Penyisihan Grup B'));
   }
 
   if (!db.event_config) {
