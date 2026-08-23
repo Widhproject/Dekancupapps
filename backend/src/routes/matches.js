@@ -29,6 +29,10 @@ function attachHimas(match) {
     category: match.category ?? null,
     home_babak: match.home_babak ?? 0,
     away_babak: match.away_babak ?? 0,
+    // Hitung foul per tim (khusus Basket) — ditampilkan di layar skor besar
+    // dan bisa diatur admin persis seperti skor.
+    home_fouls: match.home_fouls ?? 0,
+    away_fouls: match.away_fouls ?? 0,
     live_started_at: match.live_started_at ?? null,
     // Timer hitung mundur (dipakai khusus Basket): timer_end_at diisi kalau timer sedang
     // berjalan (dihitung dari sisi server supaya semua device yang nonton tetap sinkron),
@@ -144,6 +148,8 @@ router.post('/', requireAuth, requireAdmin, (req, res) => {
     away_score: 0,
     home_babak: 0,
     away_babak: 0,
+    home_fouls: 0,
+    away_fouls: 0,
     live_started_at: null,
     timer_duration_sec: null,
     timer_end_at: null,
@@ -227,19 +233,33 @@ router.patch('/:id/status', requireAuth, requireAdmin, (req, res) => {
   res.json(attachHimas(match));
 });
 
+// Sanitasi angka skor/babak/foul dari body request: harus berupa angka valid
+// dan tidak boleh negatif. Tanpa ini, body yang tidak terduga (mis. string,
+// NaN, atau angka negatif — baik dari bug klien maupun request manual ke API)
+// bisa membuat data skor rusak dan ikut tersiar ke layar skor besar secara
+// real-time sebelum sempat ketahuan.
+function sanitizeCount(value, fallback) {
+  if (value === undefined || value === null) return fallback;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(0, Math.round(n));
+}
+
 // Update skor (admin) — inti fitur live score
 router.patch('/:id/score', requireAuth, requireAdmin, (req, res) => {
-  const { home_score, away_score, home_babak, away_babak } = req.body;
+  const { home_score, away_score, home_babak, away_babak, home_fouls, away_fouls } = req.body;
   const match = db.matches.find((m) => m.id === req.params.id);
   if (!match) return res.status(404).json({ message: 'Pertandingan tidak ditemukan' });
   if (!canManageSport(req.user, match.sport_type)) {
     return res.status(403).json({ message: `Akun Anda tidak diizinkan mengelola cabor ${match.sport_type}` });
   }
 
-  match.home_score = home_score ?? match.home_score;
-  match.away_score = away_score ?? match.away_score;
-  match.home_babak = home_babak ?? match.home_babak ?? 0;
-  match.away_babak = away_babak ?? match.away_babak ?? 0;
+  match.home_score = sanitizeCount(home_score, match.home_score);
+  match.away_score = sanitizeCount(away_score, match.away_score);
+  match.home_babak = sanitizeCount(home_babak, match.home_babak ?? 0);
+  match.away_babak = sanitizeCount(away_babak, match.away_babak ?? 0);
+  match.home_fouls = sanitizeCount(home_fouls, match.home_fouls ?? 0);
+  match.away_fouls = sanitizeCount(away_fouls, match.away_fouls ?? 0);
   match.updated_at = nowStr();
   save();
 
@@ -247,6 +267,7 @@ router.patch('/:id/score', requireAuth, requireAdmin, (req, res) => {
   const payload = {
     home_score: match.home_score, away_score: match.away_score,
     home_babak: match.home_babak, away_babak: match.away_babak,
+    home_fouls: match.home_fouls, away_fouls: match.away_fouls,
   };
   io.to(`match_${req.params.id}`).emit('score_updated', payload);
   // Broadcast global juga (tidak terikat room), dipakai oleh layar skor besar yang

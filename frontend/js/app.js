@@ -970,7 +970,7 @@ route('/match/:id', async ({ params }) => {
       <button class="lightbox-close" id="photo-lightbox-close">✕</button>
     </div>`;
 
-  if (admin) bindAdminControls(m);
+  const adminState = admin ? bindAdminControls(m) : null;
   if (admin && SPORTS_WITH_TIMER.includes(m.sport_type)) restartAdminTimerInterval(m);
   bindPhotoLightbox();
 
@@ -978,9 +978,28 @@ route('/match/:id', async ({ params }) => {
   if (currentSocket) { currentSocket.disconnect(); currentSocket = null; }
   currentSocket = io(API_BASE.replace('/api', ''));
   currentSocket.emit('join_match', m.id);
-  currentSocket.on('score_updated', ({ home_score, away_score }) => {
+  currentSocket.on('score_updated', (payload) => {
+    const { home_score, away_score, home_babak, away_babak, home_fouls, away_fouls } = payload;
     bumpScoreEl(document.getElementById('home-score'), home_score);
     bumpScoreEl(document.getElementById('away-score'), away_score);
+    const setText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+    setText('home-babak-val', home_babak ?? 0);
+    setText('away-babak-val', away_babak ?? 0);
+    setText('home-foul-val', home_fouls ?? 0);
+    setText('away-foul-val', away_fouls ?? 0);
+    // Penting: sinkronkan juga state yang dipakai tombol +1/-1 admin (bukan cuma
+    // tampilannya). Tanpa ini, kalau ADA admin lain (device lain) yang mengubah
+    // skor/babak/foul, klik +1/-1 berikutnya di device ini akan menghitung dari
+    // nilai lama yang sudah basi dan balik menimpa perubahan device lain itu
+    // (lost update). Lihat juga bindAdminControls().
+    if (adminState) {
+      adminState.home = home_score;
+      adminState.away = away_score;
+      adminState.homeBabak = home_babak ?? 0;
+      adminState.awayBabak = away_babak ?? 0;
+      adminState.homeFouls = home_fouls ?? 0;
+      adminState.awayFouls = away_fouls ?? 0;
+    }
     if (admin) toast('Skor diperbarui!');
   });
   currentSocket.on('timer_updated', (payload) => {
@@ -1118,6 +1137,28 @@ function adminControlsHTML(m) {
       </div>
     </div>
 
+    ${isBasket ? `
+    <div class="eyebrow" style="margin-top:14px;">Foul Tim (untuk layar skor besar)</div>
+    <div class="score-controls">
+      <div class="team">
+        <strong>${m.home_hima.code} — <span id="home-foul-val">${m.home_fouls || 0}</span> foul</strong>
+        <div class="btns">
+          <button class="btn small ghost" data-foul-adj="home" data-delta="-1">−1</button>
+          <button class="btn small primary" data-foul-adj="home" data-delta="1">+1</button>
+        </div>
+      </div>
+      <div class="team">
+        <strong>${m.away_hima.code} — <span id="away-foul-val">${m.away_fouls || 0}</span> foul</strong>
+        <div class="btns">
+          <button class="btn small ghost" data-foul-adj="away" data-delta="-1">−1</button>
+          <button class="btn small primary" data-foul-adj="away" data-delta="1">+1</button>
+        </div>
+      </div>
+    </div>
+    <div class="event-buttons" style="margin-top:8px;">
+      <button class="btn small ghost" id="btn-foul-reset">↺ Reset Foul (kedua tim — mis. pergantian babak)</button>
+    </div>` : ''}
+
     <div class="eyebrow" style="margin-top:14px;">Catat Kejadian</div>
     <!-- Pilih tim & (opsional) nama pemain SEBELUM klik tombol kejadian di
          bawah — nilainya dikirim bareng saat tombol diklik, lalu nama pemain
@@ -1157,16 +1198,24 @@ function adminControlsHTML(m) {
   </div>`;
 }
 
+// Mengembalikan objek `state` (bukan sekadar mengikat event) supaya pemanggil
+// (route handler) bisa menyinkronkan skor/babak/foul kalau ada update dari
+// device admin lain lewat socket — lihat komentar di listener 'score_updated'
+// pada route('/match/:id'). Kalau cuma pakai variabel `let` biasa di sini,
+// closure-nya tidak bisa diakses dari luar sehingga rawan "lost update".
 function bindAdminControls(m) {
-  let home = m.home_score, away = m.away_score;
-  let homeBabak = m.home_babak || 0, awayBabak = m.away_babak || 0;
+  const state = {
+    home: m.home_score, away: m.away_score,
+    homeBabak: m.home_babak || 0, awayBabak: m.away_babak || 0,
+    homeFouls: m.home_fouls || 0, awayFouls: m.away_fouls || 0,
+  };
 
   document.querySelectorAll('[data-adj]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const side = btn.dataset.adj, delta = parseInt(btn.dataset.delta, 10);
-      if (side === 'home') home = Math.max(0, home + delta); else away = Math.max(0, away + delta);
+      if (side === 'home') state.home = Math.max(0, state.home + delta); else state.away = Math.max(0, state.away + delta);
       try {
-        await api(`/matches/${m.id}/score`, { method: 'PATCH', auth: true, body: { home_score: home, away_score: away } });
+        await api(`/matches/${m.id}/score`, { method: 'PATCH', auth: true, body: { home_score: state.home, away_score: state.away } });
       } catch (err) { toast(err.message); }
     });
   });
@@ -1174,13 +1223,39 @@ function bindAdminControls(m) {
   document.querySelectorAll('[data-babak-adj]').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const side = btn.dataset.babakAdj, delta = parseInt(btn.dataset.delta, 10);
-      if (side === 'home') homeBabak = Math.max(0, homeBabak + delta); else awayBabak = Math.max(0, awayBabak + delta);
-      document.getElementById('home-babak-val').textContent = homeBabak;
-      document.getElementById('away-babak-val').textContent = awayBabak;
+      if (side === 'home') state.homeBabak = Math.max(0, state.homeBabak + delta); else state.awayBabak = Math.max(0, state.awayBabak + delta);
+      document.getElementById('home-babak-val').textContent = state.homeBabak;
+      document.getElementById('away-babak-val').textContent = state.awayBabak;
       try {
-        await api(`/matches/${m.id}/score`, { method: 'PATCH', auth: true, body: { home_babak: homeBabak, away_babak: awayBabak } });
+        await api(`/matches/${m.id}/score`, { method: 'PATCH', auth: true, body: { home_babak: state.homeBabak, away_babak: state.awayBabak } });
       } catch (err) { toast(err.message); }
     });
+  });
+
+  document.querySelectorAll('[data-foul-adj]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const side = btn.dataset.foulAdj, delta = parseInt(btn.dataset.delta, 10);
+      if (side === 'home') state.homeFouls = Math.max(0, state.homeFouls + delta); else state.awayFouls = Math.max(0, state.awayFouls + delta);
+      document.getElementById('home-foul-val').textContent = state.homeFouls;
+      document.getElementById('away-foul-val').textContent = state.awayFouls;
+      try {
+        await api(`/matches/${m.id}/score`, { method: 'PATCH', auth: true, body: { home_fouls: state.homeFouls, away_fouls: state.awayFouls } });
+      } catch (err) { toast(err.message); }
+    });
+  });
+
+  // Reset foul kedua tim sekaligus (dipakai admin tiap pergantian babak/kuarter,
+  // karena foul tim di basket dihitung ulang dari nol tiap kuarter baru).
+  const foulResetBtn = document.getElementById('btn-foul-reset');
+  if (foulResetBtn) foulResetBtn.addEventListener('click', async () => {
+    if (!confirm('Reset foul kedua tim ke 0?')) return;
+    state.homeFouls = 0; state.awayFouls = 0;
+    document.getElementById('home-foul-val').textContent = 0;
+    document.getElementById('away-foul-val').textContent = 0;
+    try {
+      await api(`/matches/${m.id}/score`, { method: 'PATCH', auth: true, body: { home_fouls: 0, away_fouls: 0 } });
+      toast('Foul kedua tim direset');
+    } catch (err) { toast(err.message); }
   });
 
   // Kejadian yang nama pemainnya penting dicatat (dipakai nanti untuk fitur
@@ -1211,6 +1286,20 @@ function bindAdminControls(m) {
           },
         });
         if (playerInput) playerInput.value = '';
+
+        // Tombol kejadian "🚫 Foul" (khusus Basket) sengaja juga menaikkan counter
+        // foul tim yang dipilih, supaya admin tidak perlu klik dua kali (sekali di
+        // sini, sekali lagi di kontrol "Foul Tim" di atas) — dan supaya counter foul
+        // di layar skor besar tidak pernah ketinggalan/berbeda dari catatan kejadian.
+        if (eventType === 'foul' && m.sport_type === 'Basket' && teamSelect) {
+          const isHome = teamSelect.value === m.home_hima_id;
+          if (isHome) state.homeFouls += 1; else state.awayFouls += 1;
+          const valEl = document.getElementById(isHome ? 'home-foul-val' : 'away-foul-val');
+          if (valEl) valEl.textContent = isHome ? state.homeFouls : state.awayFouls;
+          try {
+            await api(`/matches/${m.id}/score`, { method: 'PATCH', auth: true, body: { home_fouls: state.homeFouls, away_fouls: state.awayFouls } });
+          } catch (err) { toast(err.message); }
+        }
       } catch (err) { toast(err.message); }
     });
   });
@@ -1303,6 +1392,8 @@ function bindAdminControls(m) {
       } catch (err) { toast(err.message); }
     });
   });
+
+  return state;
 }
 
 // ============================================================
@@ -1346,6 +1437,17 @@ function scoreboardMatchHTML(m) {
         <img src="${m.away_hima.logo_url}" onerror="this.src='assets/logos/_placeholder.svg'" />
       </div>
     </div>
+    ${showTimer ? `
+    <div class="sb-fouls">
+      <div class="sb-foul-box">
+        <span class="sb-foul-label">Foul</span>
+        <span class="sb-foul-num" id="sb-home-fouls">${m.home_fouls || 0}</span>
+      </div>
+      <div class="sb-foul-box">
+        <span class="sb-foul-label">Foul</span>
+        <span class="sb-foul-num" id="sb-away-fouls">${m.away_fouls || 0}</span>
+      </div>
+    </div>` : ''}
   </div>`;
 }
 
@@ -1390,6 +1492,8 @@ route('/layar', async () => {
       set('sb-away-score', m.away_score);
       set('sb-home-babak', `(${m.home_babak || 0})`);
       set('sb-away-babak', `(${m.away_babak || 0})`);
+      set('sb-home-fouls', m.home_fouls || 0);
+      set('sb-away-fouls', m.away_fouls || 0);
       setTimerText();
     }
   }
@@ -1416,6 +1520,8 @@ route('/layar', async () => {
         bumpScoreEl(document.getElementById('sb-away-score'), payload.away_score);
         set('sb-home-babak', `(${payload.home_babak || 0})`);
         set('sb-away-babak', `(${payload.away_babak || 0})`);
+        set('sb-home-fouls', payload.home_fouls || 0);
+        set('sb-away-fouls', payload.away_fouls || 0);
       } else {
         refresh();
       }

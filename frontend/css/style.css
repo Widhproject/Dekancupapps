@@ -944,6 +944,31 @@ body.scoreboard-mode::before{ display:none; }
   color:rgba(246,239,223,0.45);
 }
 
+.sb-fouls{
+  display:flex; align-items:center; justify-content:center;
+  gap:clamp(20px, 5vw, 90px);
+  width:100%;
+}
+.sb-foul-box{
+  display:flex; align-items:baseline; gap:.5em;
+  background:rgba(0,0,0,0.22);
+  border:1px solid rgba(212,175,55,0.35);
+  border-radius:999px;
+  padding:.4em 1.1em;
+}
+.sb-foul-label{
+  font-family:'Special Elite', monospace;
+  letter-spacing:.08em; text-transform:uppercase;
+  font-size:clamp(.85rem, 1.6vw, 1.2rem);
+  color:var(--gold-light);
+}
+.sb-foul-num{
+  font-family:'Playfair Display', serif;
+  font-weight:700;
+  font-size:clamp(1.4rem, 3.2vw, 2.4rem);
+  color:var(--paper-light);
+}
+
 .sb-idle{ gap:28px; }
 .sb-idle-logo{ width:clamp(140px, 22vw, 320px); height:auto; opacity:.92; filter:drop-shadow(0 10px 30px rgba(0,0,0,0.5)); }
 .sb-idle-text{
@@ -956,6 +981,7 @@ body.scoreboard-mode::before{ display:none; }
 @media (max-width: 700px){
   .sb-row{ flex-direction:column; gap:18px; }
   .sb-sep{ display:none; }
+  .sb-fouls{ gap:14px; }
 }
 
 /* ---------- Registrasi Peserta ---------- */
