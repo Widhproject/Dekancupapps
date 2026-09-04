@@ -240,6 +240,39 @@ a.file-link:hover{
 .filter-bar label{font-family:'Special Elite',monospace; font-size:var(--fs-label); letter-spacing:.06em; text-transform:uppercase; color:var(--forest); display:block; margin-bottom:3px;}
 .filter-group{display:flex; flex-direction:column;}
 
+/* ============ CHIP FILTER (pengganti dropdown di Jadwal & Riwayat) ============
+   Semua opsi berjejer horizontal & langsung bisa ditekan; kalau tidak muat di
+   layar sempit, baris ini di-scroll ke kanan (bukan buka dropdown). */
+.chip-filter-group{ display:flex; flex-direction:column; min-width:0; flex:1 1 220px; }
+.chip-filter-group > label{
+  font-family:'Special Elite',monospace; font-size:var(--fs-label);
+  letter-spacing:.06em; text-transform:uppercase; color:var(--forest);
+  display:block; margin-bottom:5px;
+}
+.chip-row{
+  display:flex; gap:8px; flex-wrap:nowrap; overflow-x:auto;
+  padding-bottom:4px; scrollbar-width:thin;
+  -webkit-overflow-scrolling:touch;
+}
+.chip-row::-webkit-scrollbar{ height:5px; }
+.chip-row::-webkit-scrollbar-track{ background:transparent; }
+.chip-row::-webkit-scrollbar-thumb{ background:var(--paper-dark); border-radius:99px; }
+.chip{
+  flex:0 0 auto;
+  font-family:'EB Garamond', serif;
+  font-size:.92rem;
+  padding:7px 16px;
+  border:1.5px solid var(--maroon);
+  border-radius:999px;
+  background:var(--paper-light);
+  color:var(--maroon);
+  cursor:pointer;
+  white-space:nowrap;
+  transition:background .15s ease, color .15s ease, border-color .15s ease;
+}
+.chip:hover{ background:rgba(122,42,40,0.08); }
+.chip.active{ background:var(--maroon); color:#fff; border-color:var(--maroon); }
+
 /* ============ MATCH CARD (postcard style) ============ */
 .match-list{display:grid; gap:14px;}
 .match-card{

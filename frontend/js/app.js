@@ -205,6 +205,49 @@ const SPORT_SLUGS = {
 };
 const sportToSlug = (sport) => Object.entries(SPORT_SLUGS).find(([, v]) => v === sport)?.[0] || '';
 
+// Kategori yang tersedia untuk cabor tertentu (dipakai filter Jadwal &
+// Riwayat). Kalau sportValue kosong ("Semua Cabor"), gabungkan kategori dari
+// semua cabor yang tanding head-to-head (SPORT_TYPES) — bukan SPORT_CONFIG
+// penuh, karena SPORT_CONFIG juga berisi cabor non-tanding seperti
+// Fotografi/Catur yang tidak relevan di halaman jadwal/riwayat pertandingan.
+function categoriesForSport(sportValue) {
+  if (sportValue) return SPORT_CONFIG[sportValue]?.categories || [];
+  const all = new Set();
+  SPORT_TYPES.forEach((s) => (SPORT_CONFIG[s]?.categories || []).forEach((c) => all.add(c)));
+  return [...all];
+}
+
+// ---------- Filter ala "chip" ----------
+// Dipakai di halaman Jadwal & Riwayat sebagai pengganti <select> dropdown:
+// semua pilihan langsung berjejer ke samping (scroll ke kanan kalau tidak
+// muat di layar sempit) dan bisa ditekan langsung, tanpa perlu buka dropdown
+// dulu untuk lihat opsinya.
+function chipRowHTML(options, selectedValue) {
+  const chip = (value, label, active) => `<button type="button" class="chip${active ? ' active' : ''}" data-value="${value}">${label}</button>`;
+  return chip('', 'Semua', !selectedValue) + options.map((o) => chip(o.value, o.label, o.value === selectedValue)).join('');
+}
+function chipFilterGroupHTML(id, label, options, selectedValue) {
+  return `
+    <div class="chip-filter-group">
+      <label>${label}</label>
+      <div class="chip-row" id="${id}">${chipRowHTML(options, selectedValue)}</div>
+    </div>`;
+}
+// Event delegation: sekali dipasang ke elemen .chip-row, klik salah satu chip
+// akan memindahkan class "active" lalu memanggil onSelect(value). Dipanggil
+// ulang tiap kali isi baris di-render ulang (mis. daftar Kategori berubah
+// setelah cabor lain dipilih) supaya listener-nya ikut baru.
+function bindChipRow(rowEl, onSelect) {
+  if (!rowEl) return;
+  rowEl.addEventListener('click', (e) => {
+    const btn = e.target.closest('.chip');
+    if (!btn || btn.classList.contains('active')) return;
+    rowEl.querySelectorAll('.chip').forEach((c) => c.classList.remove('active'));
+    btn.classList.add('active');
+    onSelect(btn.dataset.value);
+  });
+}
+
 function statusBadge(status) {
   return `<span class="badge ${status}">${status === 'live' ? '● ' : ''}${STATUS_LABEL[status] || status}</span>`;
 }
@@ -621,7 +664,6 @@ route('/home', async () => {
 // ============================================================
 route('/jadwal', async ({ query }) => {
   const himas = await api('/himas?team_only=true');
-  const himaOptions = himas.map((h) => `<option value="${h.id}" ${query.hima === h.id ? 'selected' : ''}>${h.code}</option>`).join('');
 
   // Matches diambil DULUAN (sebelum render awal) supaya kita sudah tahu ada
   // pertandingan live atau tidak sebelum memutuskan apa yang ditampilkan di
@@ -643,16 +685,7 @@ route('/jadwal', async ({ query }) => {
     </section>` : heroHTML();
 
   // Opsi Kategori mengikuti cabor yang dipilih di filter Cabang Olahraga —
-  // sama seperti di form Tambah Pertandingan & halaman Bagan (SPORT_CONFIG).
-  // Kalau "Semua Cabor" dipilih, gabungkan semua kategori dari semua cabor
-  // olahraga (tetap berguna, mis. cari semua pertandingan kategori "Putri"
-  // lintas cabor).
-  const categoriesFor = (sportValue) => {
-    if (sportValue) return SPORT_CONFIG[sportValue]?.categories || [];
-    const all = new Set();
-    SPORT_TYPES.forEach((s) => (SPORT_CONFIG[s]?.categories || []).forEach((c) => all.add(c)));
-    return [...all];
-  };
+  // lihat categoriesForSport() (dipakai bareng oleh halaman Jadwal & Riwayat).
 
   app.innerHTML = `
     ${heroSection}
@@ -661,49 +694,39 @@ route('/jadwal', async ({ query }) => {
         <div><div class="eyebrow">Berita Pertandingan</div><h2>Jadwal &amp; Live Score</h2></div>
       </div>
       <div class="filter-bar">
-        <div class="filter-group">
-          <label>Cabang Olahraga</label>
-          <select id="f-sport"><option value="">Semua</option>${SPORT_TYPES.map((s) => `<option value="${s}" ${query.sport_type === s ? 'selected' : ''}>${s}</option>`).join('')}</select>
-        </div>
-        <div class="filter-group">
-          <label>Kategori</label>
-          <select id="f-category">
-            <option value="">Semua</option>
-            ${categoriesFor(query.sport_type).map((c) => `<option value="${c}" ${query.category === c ? 'selected' : ''}>${c}</option>`).join('')}
-          </select>
-        </div>
-        <div class="filter-group">
-          <label>HIMA</label>
-          <select id="f-hima"><option value="">Semua</option>${himaOptions}</select>
-        </div>
+        ${chipFilterGroupHTML('f-sport', 'Cabang Olahraga', SPORT_TYPES.map((s) => ({ value: s, label: s })), query.sport_type || '')}
+        ${chipFilterGroupHTML('f-category', 'Kategori', categoriesForSport(query.sport_type).map((c) => ({ value: c, label: c })), query.category || '')}
+        ${chipFilterGroupHTML('f-hima', 'HIMA', himas.map((h) => ({ value: h.id, label: h.code })), query.hima || '')}
       </div>
       <div id="match-list" class="match-list"></div>
     </div>
   `;
 
-  document.getElementById('f-hima').value = query.hima || '';
-  document.getElementById('f-sport').value = query.sport_type || '';
-  document.getElementById('f-category').value = query.category || '';
+  let selectedSport = query.sport_type || '';
+  let selectedCategory = query.category || '';
+  let selectedHima = query.hima || '';
 
   const applyFilter = () => {
     const params = new URLSearchParams();
-    const hima = document.getElementById('f-hima').value;
-    const sport = document.getElementById('f-sport').value;
-    const category = document.getElementById('f-category').value;
-    if (hima) params.set('hima', hima);
-    if (sport) params.set('sport_type', sport);
-    if (category) params.set('category', category);
+    if (selectedHima) params.set('hima', selectedHima);
+    if (selectedSport) params.set('sport_type', selectedSport);
+    if (selectedCategory) params.set('category', selectedCategory);
     location.hash = `/jadwal?${params.toString()}`;
   };
-  document.getElementById('f-sport').addEventListener('change', (e) => {
-    // Ganti cabor → opsi Kategori dibangun ulang mengikuti cabor barunya,
+
+  bindChipRow(document.getElementById('f-sport'), (value) => {
+    // Ganti cabor → chip Kategori dibangun ulang mengikuti cabor barunya,
     // lalu reset ke "Semua" karena kategori lama belum tentu berlaku lagi
     // untuk cabor yang baru dipilih.
-    const catSelect = document.getElementById('f-category');
-    catSelect.innerHTML = `<option value="">Semua</option>${categoriesFor(e.target.value).map((c) => `<option value="${c}">${c}</option>`).join('')}`;
+    selectedSport = value;
+    selectedCategory = '';
+    const catRow = document.getElementById('f-category');
+    catRow.innerHTML = chipRowHTML(categoriesForSport(selectedSport).map((c) => ({ value: c, label: c })), '');
+    bindChipRow(catRow, (v) => { selectedCategory = v; applyFilter(); });
     applyFilter();
   });
-  ['f-hima', 'f-category'].forEach((id) => document.getElementById(id).addEventListener('change', applyFilter));
+  bindChipRow(document.getElementById('f-category'), (value) => { selectedCategory = value; applyFilter(); });
+  bindChipRow(document.getElementById('f-hima'), (value) => { selectedHima = value; applyFilter(); });
 
   // Live tampil sebagai hero di atas saja (tidak dobel di list bawah).
   // Yang sudah selesai tidak ditampilkan di halaman ini lagi — otomatis
@@ -1072,6 +1095,7 @@ function eventItemHTML(ev, m) {
 
 function adminControlsHTML(m) {
   const isBasket = m.sport_type === 'Basket';
+  const isVoli = m.sport_type === 'Voli';
   const hasTimer = SPORTS_WITH_TIMER.includes(m.sport_type);
 
   return `
@@ -1101,6 +1125,12 @@ function adminControlsHTML(m) {
         </div>
       </div>
     </div>
+
+    ${isVoli ? `
+    <div class="event-buttons" style="margin-top:8px;">
+      <button class="btn small ghost" id="btn-score-reset">↺ Reset Skor (set selesai → mulai set berikutnya)</button>
+    </div>
+    <p class="mc-meta" style="margin-top:4px;">Cuma me-reset skor kedua tim ke 0-0. Jangan lupa tekan +1 di "Babak Dimenangkan" di bawah dulu untuk tim yang menang set-nya, baru tekan tombol ini.</p>` : ''}
 
     ${hasTimer ? `
     <div class="eyebrow" style="margin-top:14px;">Timer Pertandingan</div>
@@ -1218,6 +1248,23 @@ function bindAdminControls(m) {
         await api(`/matches/${m.id}/score`, { method: 'PATCH', auth: true, body: { home_score: state.home, away_score: state.away } });
       } catch (err) { toast(err.message); }
     });
+  });
+
+  // Reset skor kedua tim ke 0-0 (khusus Voli) — dipakai admin begitu satu set
+  // selesai dan mau lanjut ke set berikutnya, karena skor per-set di voli
+  // selalu mulai dari nol lagi (beda dari "Babak Dimenangkan" di bawah, yang
+  // menghitung TOTAL set yang sudah dimenangkan sepanjang pertandingan dan
+  // sengaja TIDAK direset tombol ini).
+  const scoreResetBtn = document.getElementById('btn-score-reset');
+  if (scoreResetBtn) scoreResetBtn.addEventListener('click', async () => {
+    if (!confirm('Reset skor kedua tim ke 0-0 untuk mulai set baru?\n\n(Jumlah babak/set yang sudah dimenangkan TIDAK ikut berubah — kalau belum ditekan, catat dulu pemenang set ini lewat tombol +1 di "Babak Dimenangkan".)')) return;
+    state.home = 0; state.away = 0;
+    bumpScoreEl(document.getElementById('home-score'), 0);
+    bumpScoreEl(document.getElementById('away-score'), 0);
+    try {
+      await api(`/matches/${m.id}/score`, { method: 'PATCH', auth: true, body: { home_score: 0, away_score: 0 } });
+      toast('Skor direset — set baru dimulai');
+    } catch (err) { toast(err.message); }
   });
 
   document.querySelectorAll('[data-babak-adj]').forEach((btn) => {
@@ -1735,13 +1782,47 @@ route('/bagan', async ({ query }) => {
 // ============================================================
 // HALAMAN: RIWAYAT (pertandingan selesai)
 // ============================================================
-route('/riwayat', async () => {
-  const matches = await api('/matches?status=finished');
+route('/riwayat', async ({ query }) => {
+  const himas = await api('/himas?team_only=true');
+  const apiParams = new URLSearchParams({ status: 'finished' });
+  if (query.sport_type) apiParams.set('sport_type', query.sport_type);
+  if (query.category) apiParams.set('category', query.category);
+  if (query.hima) apiParams.set('hima', query.hima);
+  const matches = await api(`/matches?${apiParams.toString()}`);
+
   app.innerHTML = `
     <div class="wrap">
       <div class="section-head"><div><div class="eyebrow">Arsip</div><h2>Riwayat Pertandingan</h2></div></div>
-      <div class="match-list">${matches.length ? matches.map(matchCardHTML).join('') : emptyState('Belum ada pertandingan yang selesai.')}</div>
+      <div class="filter-bar">
+        ${chipFilterGroupHTML('f-sport', 'Cabang Olahraga', SPORT_TYPES.map((s) => ({ value: s, label: s })), query.sport_type || '')}
+        ${chipFilterGroupHTML('f-category', 'Kategori', categoriesForSport(query.sport_type).map((c) => ({ value: c, label: c })), query.category || '')}
+        ${chipFilterGroupHTML('f-hima', 'HIMA', himas.map((h) => ({ value: h.id, label: h.code })), query.hima || '')}
+      </div>
+      <div class="match-list">${matches.length ? matches.map(matchCardHTML).join('') : emptyState('Belum ada pertandingan yang selesai untuk filter ini.')}</div>
     </div>`;
+
+  let selectedSport = query.sport_type || '';
+  let selectedCategory = query.category || '';
+  let selectedHima = query.hima || '';
+
+  const applyFilter = () => {
+    const params = new URLSearchParams();
+    if (selectedHima) params.set('hima', selectedHima);
+    if (selectedSport) params.set('sport_type', selectedSport);
+    if (selectedCategory) params.set('category', selectedCategory);
+    location.hash = `/riwayat?${params.toString()}`;
+  };
+
+  bindChipRow(document.getElementById('f-sport'), (value) => {
+    selectedSport = value;
+    selectedCategory = '';
+    const catRow = document.getElementById('f-category');
+    catRow.innerHTML = chipRowHTML(categoriesForSport(selectedSport).map((c) => ({ value: c, label: c })), '');
+    bindChipRow(catRow, (v) => { selectedCategory = v; applyFilter(); });
+    applyFilter();
+  });
+  bindChipRow(document.getElementById('f-category'), (value) => { selectedCategory = value; applyFilter(); });
+  bindChipRow(document.getElementById('f-hima'), (value) => { selectedHima = value; applyFilter(); });
 });
 
 // ============================================================
@@ -2241,6 +2322,23 @@ route('/admin', async () => {
     <div class="wrap">
       <div class="section-head"><div><div class="eyebrow">Panel Panitia</div><h2>Kelola Jadwal Pertandingan</h2></div></div>
 
+      <details class="admin-score-box admin-section" data-section-key="backup" ${sectionOpen('backup')}>
+        <summary>
+          <div class="admin-section-title">Backup Data<small>Unduh salinan HIMA, jadwal &amp; riwayat pertandingan, dst sebagai JSON</small></div>
+          <span class="chevron">${CHEVRON_ICON}</span>
+        </summary>
+        <div class="admin-section-body">
+          <p class="mc-meta" style="margin-bottom:10px;">
+            Semua data aplikasi ini (termasuk <strong>riwayat pertandingan</strong>) disimpan di satu file di server,
+            bukan di database terpisah — jadi tidak ikut "aman otomatis" kalau suatu saat servernya di-deploy ulang
+            tanpa penyimpanan permanen (Volume) yang benar. Unduh backup ini secara berkala, dan <strong>WAJIB sebelum
+            melakukan update/deploy besar</strong>, supaya ada salinan yang bisa dipulihkan kalau data di server
+            ternyata ikut ter-reset.
+          </p>
+          <button class="btn primary" id="btn-download-backup" type="button">⬇️ Unduh Backup (.json)</button>
+        </div>
+      </details>
+
       <details class="admin-score-box admin-section" data-section-key="new-match" ${sectionOpen('new-match')}>
         <summary>
           <div class="admin-section-title">Tambah Pertandingan Baru<small>Buat jadwal baru untuk salah satu cabor</small></div>
@@ -2443,6 +2541,32 @@ route('/admin', async () => {
   });
 
   // Opsi Kategori mengikuti cabor yang dipilih (mis. Futsal → Putra/Putri,
+  document.getElementById('btn-download-backup').addEventListener('click', async () => {
+    const btn = document.getElementById('btn-download-backup');
+    btn.disabled = true;
+    try {
+      const res = await fetch(`${API_BASE}/admin/export`, { headers: { Authorization: `Bearer ${getToken()}` } });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.message || 'Gagal mengunduh backup');
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `dekancup-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast('Backup berhasil diunduh');
+    } catch (err) {
+      toast(err.message);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
   // Badminton → Ganda Putra/Ganda Putri/Campuran) — diambil dari SPORT_CONFIG
   // yang sama dipakai formulir pendaftaran, supaya penamaan kategori selalu
   // konsisten antara jadwal pertandingan & data pendaftaran tim.
