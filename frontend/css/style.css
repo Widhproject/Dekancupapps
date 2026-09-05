@@ -1010,7 +1010,6 @@ body.scoreboard-mode::before{ display:none; }
 .sb-side{
   display:flex; align-items:baseline; gap:clamp(8px, 1.4vw, 18px);
 }
-.sb-side-reverse{ flex-direction:row-reverse; }
 .sb-big{
   font-family:'Playfair Display', serif;
   font-weight:900;
@@ -1018,6 +1017,12 @@ body.scoreboard-mode::before{ display:none; }
   line-height:1;
   color:var(--paper-light);
   text-shadow:0 6px 30px rgba(0,0,0,0.5);
+  /* Angka pakai lebar digit yang seragam (mis. "1" tidak lebih sempit dari
+     "0"), supaya garis pemisah "–" di tengah tidak ikut geser dikit tiap
+     kali skor berubah — tanpa ini posisi tengahnya "goyang" tergantung
+     angka berapa yang sedang tampil. */
+  font-variant-numeric:tabular-nums;
+  text-align:center;
 }
 .sb-small{
   font-family:'Cormorant Garamond', serif;
@@ -1237,17 +1242,19 @@ label .sport-icon-svg{ margin-right:.3em; }
    pertandingan (.score-num) dan layar skor besar (.sb-big).
 ============================================================ */
 /* ============================================================
-   ANIMASI SKOR — angka "slide" masuk dari bawah ke atas tiap kali skor
-   berubah (real-time lewat socket), supaya update terasa hidup tanpa
-   kesan "berkedip". Dipakai di halaman detail pertandingan (.score-num)
-   dan layar skor besar (.sb-big).
+   ANIMASI SKOR — angka "slide" naik dari bawah lalu mendarat dengan sedikit
+   pantulan (overshoot) tiap kali skor berubah (real-time lewat socket),
+   supaya update terasa jelas & elegan tanpa kesan "berkedip" (tidak ada
+   perubahan warna/flash, murni gerakan masuk).  Dipakai di halaman detail
+   pertandingan (.score-num) dan layar skor besar (.sb-big).
 ============================================================ */
 @keyframes score-slide-up{
-  0%{ transform:translateY(.5em); opacity:0; }
-  55%{ transform:translateY(-.06em); opacity:1; }
-  100%{ transform:translateY(0); opacity:1; }
+  0%{ transform:translateY(1.15em) scale(.85); opacity:0; }
+  50%{ transform:translateY(-.18em) scale(1.06); opacity:1; }
+  72%{ transform:translateY(.05em) scale(.99); }
+  100%{ transform:translateY(0) scale(1); opacity:1; }
 }
 .score-bump{
   display:inline-block;
-  animation:score-slide-up .45s cubic-bezier(.22,1,.36,1);
+  animation:score-slide-up .65s cubic-bezier(.22,1,.36,1);
 }

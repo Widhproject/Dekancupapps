@@ -1460,7 +1460,7 @@ function scoreboardMatchHTML(m) {
           <span class="sb-small sb-babak-pill" id="sb-home-babak">${babakLabel} ${m.home_babak || 0}</span>
         </div>
         <div class="sb-sep">–</div>
-        <div class="sb-side sb-side-reverse">
+        <div class="sb-side">
           <span class="sb-small sb-babak-pill" id="sb-away-babak">${babakLabel} ${m.away_babak || 0}</span>
           <span class="sb-big" id="sb-away-score">${m.away_score}</span>
         </div>
