@@ -253,6 +253,14 @@ a.file-link:hover{
   display:flex; gap:8px; flex-wrap:nowrap; overflow-x:auto;
   padding-bottom:4px; scrollbar-width:thin;
   -webkit-overflow-scrolling:touch;
+  /* WAJIB: tanpa ini, .chip-row (sebagai flex item di .chip-filter-group)
+     melebar mengikuti total lebar semua chip (default min-width:auto pada
+     flex item), sehingga kotaknya sendiri jadi lebih lebar dari card
+     pembungkusnya dan "menembus" ke luar — bukannya di-scroll rapi di
+     dalam. min-width:0 memaksa lebarnya ikut kotak induk, baru overflow-x
+     di atas benar-benar bisa memicu scroll internal. */
+  min-width:0;
+  width:100%;
 }
 .chip-row::-webkit-scrollbar{ height:5px; }
 .chip-row::-webkit-scrollbar-track{ background:transparent; }
@@ -849,7 +857,13 @@ a.file-link:hover{
   .org-logos{ order:3; width:100%; justify-content:center; padding-top:6px; }
   .org-logos .divider{ display:none; }
 
-  .filter-bar{ flex-direction:column; align-items:stretch; }
+  /* flex-wrap:nowrap WAJIB di sini: flex-direction:column + flex-wrap:wrap
+     (warisan dari rule desktop) artinya browser bisa membentuk "kolom baru"
+     kalau satu item kepanjangan — dan karena cuma ada 1 grup filter, tidak
+     ada kolom lain buat pindah, jadi baris chip-nya malah dibiarkan melebar
+     menembus kotak alih-alih diciutkan/discroll. nowrap menghilangkan
+     perilaku itu; grup filter cukup ditumpuk vertikal biasa. */
+  .filter-bar{ flex-direction:column; flex-wrap:nowrap; align-items:stretch; }
   .filter-group{ width:100%; }
   .filter-bar select, .filter-bar input{ width:100%; }
 
