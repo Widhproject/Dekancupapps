@@ -243,7 +243,7 @@ a.file-link:hover{
 /* ============ CHIP FILTER (pengganti dropdown di Jadwal & Riwayat) ============
    Semua opsi berjejer horizontal & langsung bisa ditekan; kalau tidak muat di
    layar sempit, baris ini di-scroll ke kanan (bukan buka dropdown). */
-.chip-filter-group{ display:flex; flex-direction:column; min-width:0; flex:1 1 220px; }
+.chip-filter-group{ display:flex; flex-direction:column; min-width:0; flex:1 1 auto; }
 .chip-filter-group > label{
   font-family:'Special Elite',monospace; font-size:var(--fs-label);
   letter-spacing:.06em; text-transform:uppercase; color:var(--forest);
@@ -937,6 +937,60 @@ body.scoreboard-mode::before{ display:none; }
   width:100%;
 }
 
+/* Topbar: badge "LIVE" berkedip pelan + nama ronde/kategori (mis. "SEMI
+   FINAL · PUTRA") — supaya penonton yang baru datang langsung tahu ini
+   laga apa tanpa perlu tanya-tanya. */
+.sb-topbar{
+  display:flex; align-items:center; justify-content:center;
+  gap:clamp(10px, 2vw, 18px);
+  flex-wrap:wrap;
+}
+.sb-live-badge{
+  display:flex; align-items:center; gap:8px;
+  font-family:'Special Elite', monospace;
+  letter-spacing:.14em;
+  font-size:clamp(.8rem, 1.6vw, 1.05rem);
+  color:#fff;
+  background:#b6302c;
+  border-radius:999px;
+  padding:.4em 1.1em .4em .85em;
+  box-shadow:0 4px 18px rgba(182,48,44,0.5);
+}
+.sb-live-dot{
+  width:.55em; height:.55em; border-radius:50%;
+  background:#fff;
+  box-shadow:0 0 0 0 rgba(255,255,255,0.6);
+  animation:sb-pulse-white 1.4s ease-out infinite;
+}
+@keyframes sb-pulse-white{
+  0%{ box-shadow:0 0 0 0 rgba(255,255,255,0.6); }
+  70%{ box-shadow:0 0 0 12px rgba(255,255,255,0); }
+  100%{ box-shadow:0 0 0 0 rgba(255,255,255,0); }
+}
+.sb-round-badge{
+  font-family:'EB Garamond', serif;
+  font-size:clamp(.9rem, 1.9vw, 1.3rem);
+  letter-spacing:.04em;
+  text-transform:uppercase;
+  color:var(--gold-light);
+  background:rgba(0,0,0,0.25);
+  border:1px solid rgba(212,175,55,0.4);
+  border-radius:999px;
+  padding:.4em 1.2em;
+}
+
+/* Bungkus logo (lingkaran) + nama kode tim di bawahnya jadi satu kolom,
+   supaya nama timnya tidak numpuk di dalam lingkaran logo. */
+.sb-team-col{ display:flex; flex-direction:column; align-items:center; gap:clamp(10px, 2vh, 18px); }
+.sb-team-name{
+  font-family:'Playfair Display', serif; font-weight:700;
+  font-size:clamp(1.05rem, 2.2vw, 1.75rem);
+  letter-spacing:.03em;
+  color:var(--paper-light);
+  text-align:center;
+  text-shadow:0 2px 10px rgba(0,0,0,0.55);
+}
+
 .sb-team{
   flex:0 0 auto;
   width:clamp(90px, 15vw, 240px); height:clamp(90px, 15vw, 240px);
@@ -970,6 +1024,17 @@ body.scoreboard-mode::before{ display:none; }
   font-weight:600;
   font-size:clamp(1.6rem, 4.5vw, 3.4rem);
   color:var(--gold-light);
+}
+.sb-babak-pill{
+  display:inline-block;
+  font-size:clamp(.85rem, 2vw, 1.3rem) !important;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+  background:rgba(212,175,55,0.16);
+  border:1px solid rgba(212,175,55,0.45);
+  border-radius:999px;
+  padding:.3em 1em;
+  margin-top:.4em;
 }
 .sb-sep{
   font-family:'Playfair Display', serif;
@@ -1171,12 +1236,18 @@ label .sport-icon-svg{ margin-right:.3em; }
    diam-diam dari angka lama ke angka baru. Dipakai di halaman detail
    pertandingan (.score-num) dan layar skor besar (.sb-big).
 ============================================================ */
-@keyframes score-pop{
-  0%{ transform:scale(1); }
-  35%{ transform:scale(1.35); color:var(--gold); text-shadow:0 0 14px rgba(184,134,11,.55); }
-  100%{ transform:scale(1); }
+/* ============================================================
+   ANIMASI SKOR — angka "slide" masuk dari bawah ke atas tiap kali skor
+   berubah (real-time lewat socket), supaya update terasa hidup tanpa
+   kesan "berkedip". Dipakai di halaman detail pertandingan (.score-num)
+   dan layar skor besar (.sb-big).
+============================================================ */
+@keyframes score-slide-up{
+  0%{ transform:translateY(.5em); opacity:0; }
+  55%{ transform:translateY(-.06em); opacity:1; }
+  100%{ transform:translateY(0); opacity:1; }
 }
 .score-bump{
   display:inline-block;
-  animation:score-pop .5s cubic-bezier(.34,1.56,.64,1);
+  animation:score-slide-up .45s cubic-bezier(.22,1,.36,1);
 }

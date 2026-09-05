@@ -205,18 +205,6 @@ const SPORT_SLUGS = {
 };
 const sportToSlug = (sport) => Object.entries(SPORT_SLUGS).find(([, v]) => v === sport)?.[0] || '';
 
-// Kategori yang tersedia untuk cabor tertentu (dipakai filter Jadwal &
-// Riwayat). Kalau sportValue kosong ("Semua Cabor"), gabungkan kategori dari
-// semua cabor yang tanding head-to-head (SPORT_TYPES) — bukan SPORT_CONFIG
-// penuh, karena SPORT_CONFIG juga berisi cabor non-tanding seperti
-// Fotografi/Catur yang tidak relevan di halaman jadwal/riwayat pertandingan.
-function categoriesForSport(sportValue) {
-  if (sportValue) return SPORT_CONFIG[sportValue]?.categories || [];
-  const all = new Set();
-  SPORT_TYPES.forEach((s) => (SPORT_CONFIG[s]?.categories || []).forEach((c) => all.add(c)));
-  return [...all];
-}
-
 // ---------- Filter ala "chip" ----------
 // Dipakai di halaman Jadwal & Riwayat sebagai pengganti <select> dropdown:
 // semua pilihan langsung berjejer ke samping (scroll ke kanan kalau tidak
@@ -663,14 +651,16 @@ route('/home', async () => {
 // HALAMAN: JADWAL
 // ============================================================
 route('/jadwal', async ({ query }) => {
-  const himas = await api('/himas?team_only=true');
-
   // Matches diambil DULUAN (sebelum render awal) supaya kita sudah tahu ada
   // pertandingan live atau tidak sebelum memutuskan apa yang ditampilkan di
   // posisi hero: judul biasa (kalau tidak ada live), atau langsung tampilan
   // pertandingan yang sedang berlangsung (kalau ada) — jadi tidak perlu lagi
   // menampilkan dua-duanya sekaligus (judul + spotlight terpisah di bawahnya).
-  const matches = await api(`/matches?${new URLSearchParams(query).toString()}`);
+  //
+  // Sengaja cuma filter by sport_type — TIDAK ada filter Kategori/HIMA lagi
+  // (dulu ada, dihapus atas permintaan: cukup pilih cabor, kategori Putra &
+  // Putri-nya otomatis ikut tampil bareng tanpa perlu dipilah lagi).
+  const matches = await api(`/matches?${new URLSearchParams(query.sport_type ? { sport_type: query.sport_type } : {}).toString()}`);
   const liveMatches = matches.filter((m) => m.status === 'live');
   const scheduledMatches = matches.filter((m) => m.status === 'scheduled');
 
@@ -684,9 +674,6 @@ route('/jadwal', async ({ query }) => {
       </div>
     </section>` : heroHTML();
 
-  // Opsi Kategori mengikuti cabor yang dipilih di filter Cabang Olahraga —
-  // lihat categoriesForSport() (dipakai bareng oleh halaman Jadwal & Riwayat).
-
   app.innerHTML = `
     ${heroSection}
     <div class="wrap">
@@ -695,44 +682,26 @@ route('/jadwal', async ({ query }) => {
       </div>
       <div class="filter-bar">
         ${chipFilterGroupHTML('f-sport', 'Cabang Olahraga', SPORT_TYPES.map((s) => ({ value: s, label: s })), query.sport_type || '')}
-        ${chipFilterGroupHTML('f-category', 'Kategori', categoriesForSport(query.sport_type).map((c) => ({ value: c, label: c })), query.category || '')}
-        ${chipFilterGroupHTML('f-hima', 'HIMA', himas.map((h) => ({ value: h.id, label: h.code })), query.hima || '')}
       </div>
       <div id="match-list" class="match-list"></div>
     </div>
   `;
 
   let selectedSport = query.sport_type || '';
-  let selectedCategory = query.category || '';
-  let selectedHima = query.hima || '';
 
   const applyFilter = () => {
     const params = new URLSearchParams();
-    if (selectedHima) params.set('hima', selectedHima);
     if (selectedSport) params.set('sport_type', selectedSport);
-    if (selectedCategory) params.set('category', selectedCategory);
     location.hash = `/jadwal?${params.toString()}`;
   };
 
-  bindChipRow(document.getElementById('f-sport'), (value) => {
-    // Ganti cabor → chip Kategori dibangun ulang mengikuti cabor barunya,
-    // lalu reset ke "Semua" karena kategori lama belum tentu berlaku lagi
-    // untuk cabor yang baru dipilih.
-    selectedSport = value;
-    selectedCategory = '';
-    const catRow = document.getElementById('f-category');
-    catRow.innerHTML = chipRowHTML(categoriesForSport(selectedSport).map((c) => ({ value: c, label: c })), '');
-    bindChipRow(catRow, (v) => { selectedCategory = v; applyFilter(); });
-    applyFilter();
-  });
-  bindChipRow(document.getElementById('f-category'), (value) => { selectedCategory = value; applyFilter(); });
-  bindChipRow(document.getElementById('f-hima'), (value) => { selectedHima = value; applyFilter(); });
+  bindChipRow(document.getElementById('f-sport'), (value) => { selectedSport = value; applyFilter(); });
 
   // Live tampil sebagai hero di atas saja (tidak dobel di list bawah).
   // Yang sudah selesai tidak ditampilkan di halaman ini lagi — otomatis
   // pindah ke tab Riwayat. List di bawah cuma untuk yang belum mulai.
   const list = document.getElementById('match-list');
-  const noFilterApplied = !query.hima && !query.sport_type;
+  const noFilterApplied = !query.sport_type;
   if (scheduledMatches.length) {
     list.innerHTML = scheduledMatches.map(matchCardHTML).join('');
   } else if (matches.length && (liveMatches.length || matches.some((m) => m.status === 'finished'))) {
@@ -1460,28 +1429,47 @@ function scoreboardIdleHTML() {
 // Voli dan cabor lain ditampilkan tanpa timer — cukup logo & skor saja.
 const SPORTS_WITH_TIMER = ['Basket'];
 
+// Label "babak yang dimenangkan" disesuaikan istilah per cabor supaya lebih
+// natural dibaca di layar besar — Voli pakai "Set" (istilah baku voli),
+// cabor lain pakai "Babak" (generik).
+function sbBabakLabel(sportType) {
+  return sportType === 'Voli' ? 'Set' : 'Babak';
+}
+
 function scoreboardMatchHTML(m) {
   const showTimer = SPORTS_WITH_TIMER.includes(m.sport_type);
+  const babakLabel = sbBabakLabel(m.sport_type);
+  const roundText = [m.round_name, m.category].filter(Boolean).join(' · ') || m.sport_type;
   return `
   <div class="sb-stage">
+    <div class="sb-topbar">
+      <span class="sb-live-badge"><span class="sb-live-dot"></span>LIVE</span>
+      <span class="sb-round-badge">${roundText}</span>
+    </div>
     ${showTimer ? `<div class="sb-clock"><span class="sb-dot"></span><span id="sb-timer">${fmtCountdown(computeRemainingSec(m))}</span></div>` : ''}
     <div class="sb-row">
-      <div class="sb-team">
-        <img src="${m.home_hima.logo_url}" onerror="this.src='assets/logos/_placeholder.svg'" />
+      <div class="sb-team-col">
+        <div class="sb-team">
+          <img src="${m.home_hima.logo_url}" onerror="this.src='assets/logos/_placeholder.svg'" />
+        </div>
+        <div class="sb-team-name">${m.home_hima.code}</div>
       </div>
       <div class="sb-scores">
         <div class="sb-side">
           <span class="sb-big" id="sb-home-score">${m.home_score}</span>
-          <span class="sb-small" id="sb-home-babak">(${m.home_babak || 0})</span>
+          <span class="sb-small sb-babak-pill" id="sb-home-babak">${babakLabel} ${m.home_babak || 0}</span>
         </div>
         <div class="sb-sep">–</div>
         <div class="sb-side sb-side-reverse">
-          <span class="sb-small" id="sb-away-babak">(${m.away_babak || 0})</span>
+          <span class="sb-small sb-babak-pill" id="sb-away-babak">${babakLabel} ${m.away_babak || 0}</span>
           <span class="sb-big" id="sb-away-score">${m.away_score}</span>
         </div>
       </div>
-      <div class="sb-team">
-        <img src="${m.away_hima.logo_url}" onerror="this.src='assets/logos/_placeholder.svg'" />
+      <div class="sb-team-col">
+        <div class="sb-team">
+          <img src="${m.away_hima.logo_url}" onerror="this.src='assets/logos/_placeholder.svg'" />
+        </div>
+        <div class="sb-team-name">${m.away_hima.code}</div>
       </div>
     </div>
     ${showTimer ? `
@@ -1503,6 +1491,7 @@ route('/layar', async () => {
   const root = document.getElementById('sb-root');
 
   let current = null; // id pertandingan yang sedang ditampilkan
+  let currentSportType = null; // dipakai supaya listener socket tahu label "Set"/"Babak" yang benar tanpa perlu refetch
   // State timer hitung mundur (dipakai oleh interval "mencentang" tiap detik di bawah).
   let timerState = { timer_end_at: null, timer_paused_remaining_sec: null, timer_duration_sec: null };
 
@@ -1518,6 +1507,7 @@ route('/layar', async () => {
 
     if (!m) {
       current = null;
+      currentSportType = null;
       timerState = { timer_end_at: null, timer_paused_remaining_sec: null, timer_duration_sec: null };
       root.innerHTML = scoreboardIdleHTML();
       return;
@@ -1528,6 +1518,7 @@ route('/layar', async () => {
 
     if (current !== m.id) {
       current = m.id;
+      currentSportType = m.sport_type;
       root.innerHTML = scoreboardMatchHTML(m);
     } else {
       // Set biasa (bukan animasi) karena ini jalur polling cadangan yang jalan
@@ -1535,10 +1526,11 @@ route('/layar', async () => {
       // dipasang di jalur socket real-time (lihat listener 'live_score_updated'
       // di bawah) supaya cuma memicu saat memang ada perubahan sungguhan.
       const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+      const babakLabel = sbBabakLabel(m.sport_type);
       set('sb-home-score', m.home_score);
       set('sb-away-score', m.away_score);
-      set('sb-home-babak', `(${m.home_babak || 0})`);
-      set('sb-away-babak', `(${m.away_babak || 0})`);
+      set('sb-home-babak', `${babakLabel} ${m.home_babak || 0}`);
+      set('sb-away-babak', `${babakLabel} ${m.away_babak || 0}`);
       set('sb-home-fouls', m.home_fouls || 0);
       set('sb-away-fouls', m.away_fouls || 0);
       setTimerText();
@@ -1565,8 +1557,9 @@ route('/layar', async () => {
         const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
         bumpScoreEl(document.getElementById('sb-home-score'), payload.home_score);
         bumpScoreEl(document.getElementById('sb-away-score'), payload.away_score);
-        set('sb-home-babak', `(${payload.home_babak || 0})`);
-        set('sb-away-babak', `(${payload.away_babak || 0})`);
+        const babakLabel = sbBabakLabel(currentSportType);
+        set('sb-home-babak', `${babakLabel} ${payload.home_babak || 0}`);
+        set('sb-away-babak', `${babakLabel} ${payload.away_babak || 0}`);
         set('sb-home-fouls', payload.home_fouls || 0);
         set('sb-away-fouls', payload.away_fouls || 0);
       } else {
@@ -1783,11 +1776,10 @@ route('/bagan', async ({ query }) => {
 // HALAMAN: RIWAYAT (pertandingan selesai)
 // ============================================================
 route('/riwayat', async ({ query }) => {
-  const himas = await api('/himas?team_only=true');
+  // Sama seperti /jadwal: cuma filter by sport_type, tidak ada
+  // Kategori/HIMA lagi — pilih cabor, Putra & Putri-nya otomatis tampil bareng.
   const apiParams = new URLSearchParams({ status: 'finished' });
   if (query.sport_type) apiParams.set('sport_type', query.sport_type);
-  if (query.category) apiParams.set('category', query.category);
-  if (query.hima) apiParams.set('hima', query.hima);
   const matches = await api(`/matches?${apiParams.toString()}`);
 
   app.innerHTML = `
@@ -1795,34 +1787,19 @@ route('/riwayat', async ({ query }) => {
       <div class="section-head"><div><div class="eyebrow">Arsip</div><h2>Riwayat Pertandingan</h2></div></div>
       <div class="filter-bar">
         ${chipFilterGroupHTML('f-sport', 'Cabang Olahraga', SPORT_TYPES.map((s) => ({ value: s, label: s })), query.sport_type || '')}
-        ${chipFilterGroupHTML('f-category', 'Kategori', categoriesForSport(query.sport_type).map((c) => ({ value: c, label: c })), query.category || '')}
-        ${chipFilterGroupHTML('f-hima', 'HIMA', himas.map((h) => ({ value: h.id, label: h.code })), query.hima || '')}
       </div>
       <div class="match-list">${matches.length ? matches.map(matchCardHTML).join('') : emptyState('Belum ada pertandingan yang selesai untuk filter ini.')}</div>
     </div>`;
 
   let selectedSport = query.sport_type || '';
-  let selectedCategory = query.category || '';
-  let selectedHima = query.hima || '';
 
   const applyFilter = () => {
     const params = new URLSearchParams();
-    if (selectedHima) params.set('hima', selectedHima);
     if (selectedSport) params.set('sport_type', selectedSport);
-    if (selectedCategory) params.set('category', selectedCategory);
     location.hash = `/riwayat?${params.toString()}`;
   };
 
-  bindChipRow(document.getElementById('f-sport'), (value) => {
-    selectedSport = value;
-    selectedCategory = '';
-    const catRow = document.getElementById('f-category');
-    catRow.innerHTML = chipRowHTML(categoriesForSport(selectedSport).map((c) => ({ value: c, label: c })), '');
-    bindChipRow(catRow, (v) => { selectedCategory = v; applyFilter(); });
-    applyFilter();
-  });
-  bindChipRow(document.getElementById('f-category'), (value) => { selectedCategory = value; applyFilter(); });
-  bindChipRow(document.getElementById('f-hima'), (value) => { selectedHima = value; applyFilter(); });
+  bindChipRow(document.getElementById('f-sport'), (value) => { selectedSport = value; applyFilter(); });
 });
 
 // ============================================================
