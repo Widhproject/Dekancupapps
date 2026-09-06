@@ -959,10 +959,22 @@ body.scoreboard-mode::before{ display:none; }
   100%{ box-shadow:0 0 0 0 rgba(226,84,79,0); }
 }
 
+/* Grid (bukan flex) sengaja dipakai di sini: kolom kiri & kanan pakai
+   minmax(0,1fr) supaya kolom logo tim BENAR-BENAR bisa menyusut kalau ruang
+   sempit (mis. di layar 1920px saat skor + pill "BABAK" di tengah sudah
+   makan banyak tempat) — bukan malah terdorong keluar viewport lalu
+   kepotong overflow:hidden di .sb-stage. Flexbox versi lama tidak bisa
+   menjamin ini karena flex item defaultnya tidak mau menyusut di bawah
+   ukuran alami kontennya kecuali diberi aturan tambahan; grid-track
+   minmax(0, 1fr) memang dirancang khusus untuk kasus "jangan pernah
+   overflow" seperti ini. */
 .sb-row{
-  display:flex; align-items:center; justify-content:center;
-  gap:clamp(20px, 5vw, 90px);
+  display:grid;
+  grid-template-columns:minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items:center; justify-items:center;
+  gap:clamp(12px, 3vw, 90px);
   width:100%;
+  max-width:100%;
 }
 
 /* Topbar: badge "LIVE" berkedip pelan + nama ronde/kategori (mis. "SEMI
@@ -1008,8 +1020,17 @@ body.scoreboard-mode::before{ display:none; }
 }
 
 /* Bungkus logo (lingkaran) + nama kode tim di bawahnya jadi satu kolom,
-   supaya nama timnya tidak numpuk di dalam lingkaran logo. */
-.sb-team-col{ display:flex; flex-direction:column; align-items:center; gap:clamp(10px, 2vh, 18px); }
+   supaya nama timnya tidak numpuk di dalam lingkaran logo.
+   min-width:0 + width:100% WAJIB ada di sini: tanpa ini, kolom grid
+   minmax(0,1fr) di .sb-row tidak akan pernah benar-benar menyusut karena
+   ukuran minimum bawaan flex/grid item itu ikut ukuran alami kontennya,
+   bukan 0 — jadi logo tetap bisa terdorong keluar layar walau kolomnya
+   sendiri sudah dibuat fleksibel. */
+.sb-team-col{
+  display:flex; flex-direction:column; align-items:center;
+  gap:clamp(10px, 2vh, 18px);
+  min-width:0; width:100%;
+}
 .sb-team-name{
   font-family:'Playfair Display', serif; font-weight:700;
   font-size:clamp(1.05rem, 2.2vw, 1.75rem);
@@ -1017,23 +1038,33 @@ body.scoreboard-mode::before{ display:none; }
   color:var(--paper-light);
   text-align:center;
   text-shadow:0 2px 10px rgba(0,0,0,0.55);
+  max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
 }
 
 .sb-team{
   flex:0 0 auto;
-  width:clamp(90px, 15vw, 240px); height:clamp(90px, 15vw, 240px);
+  /* min() (bukan clamp px murni) supaya logo ikut menyusut kalau kolom
+     grid-nya kepepet sempit (lihat catatan .sb-team-col di atas) — patokan
+     ukuran "normal"-nya tetap sama seperti sebelumnya (maks ~240px atau
+     15% lebar layar), tapi sekarang ada lapisan pengaman tambahan: tidak
+     akan pernah melebihi 100% lebar kolom yang tersedia. */
+  width:min(240px, 15vw, 100%);
+  aspect-ratio:1/1;
+  max-width:100%;
   display:flex; align-items:center; justify-content:center;
   background:var(--paper-light);
   border-radius:50%;
   border:4px solid var(--gold-light);
   box-shadow:0 10px 40px rgba(0,0,0,0.45);
   padding:14px;
+  box-sizing:border-box;
 }
 .sb-team img{ width:100%; height:100%; object-fit:contain; }
 
 .sb-scores{
   display:flex; align-items:center; justify-content:center;
   gap:clamp(16px, 3vw, 48px);
+  min-width:0;
 }
 .sb-side{
   display:flex; align-items:baseline; gap:clamp(8px, 1.4vw, 18px);
@@ -1041,7 +1072,14 @@ body.scoreboard-mode::before{ display:none; }
 .sb-big{
   font-family:'Playfair Display', serif;
   font-weight:900;
-  font-size:clamp(4rem, 16vw, 13rem);
+  /* Sebelumnya maks 13rem — di layar/jendela lebar sedang (mis. laptop
+     1280-1366px, umum dipakai proyektor kampus yang bukan Full HD asli)
+     ukuran semaksimal itu menghabiskan nyaris semua ruang horizontal,
+     sehingga logo tim kebagian sisa sangat sempit walau sudah tidak
+     kepotong lagi. Diturunkan ke 8.5rem — tetap besar & jelas terbaca dari
+     jarak jauh, tapi menyisakan ruang jauh lebih banyak untuk logo di
+     kedua sisi pada lebar layar yang umum dipakai. */
+  font-size:clamp(3rem, 11vw, 8.5rem);
   line-height:1;
   color:var(--paper-light);
   text-shadow:0 6px 30px rgba(0,0,0,0.5);
@@ -1119,7 +1157,11 @@ body.scoreboard-mode::before{ display:none; }
 }
 
 @media (max-width: 700px){
-  .sb-row{ flex-direction:column; gap:18px; }
+  /* Grid 1 kolom (bukan lagi flex-direction:column) — logo home, blok
+     skor, dan logo away tetap tersusun sesuai urutan DOM-nya (atas ke
+     bawah), konsisten dengan perilaku lama sebelum .sb-row diubah jadi
+     grid untuk memperbaiki masalah logo kepotong di layar lebar. */
+  .sb-row{ grid-template-columns:1fr; gap:18px; }
   .sb-sep{ display:none; }
   .sb-fouls{ gap:14px; }
 }
