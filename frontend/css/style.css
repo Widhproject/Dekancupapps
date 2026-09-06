@@ -903,7 +903,17 @@ a.file-link:hover{
    Bersih total: tanpa navbar, tanpa footer, tanpa elemen lain —
    hanya logo HIMA, skor, dan waktu berjalan.
 ============================================================ */
-body.scoreboard-mode{ background:var(--forest-dark); }
+body.scoreboard-mode{
+  /* Gradiennya taruh di body (bukan di .sb-stage) supaya tetap menutup penuh
+     layar walau .sb-stage sendiri digeser (transform) untuk keperluan
+     centering vertikal — kalau taruh di .sb-stage, geserannya bisa
+     menyisakan celah warna polos di tepi layar. background-attachment:fixed
+     dari body{} bawaan sudah cukup menjaga ini tetap diam di tempat. */
+  background:
+    radial-gradient(ellipse at 20% 15%, rgba(122,42,40,0.55), transparent 55%),
+    radial-gradient(ellipse at 82% 85%, rgba(122,42,40,0.45), transparent 55%),
+    linear-gradient(160deg, var(--forest-dark), #1b271f 60%, #150e0c);
+}
 body.scoreboard-mode .navbar,
 body.scoreboard-mode .footer,
 body.scoreboard-mode .toast-container{ display:none !important; }
@@ -914,12 +924,16 @@ body.scoreboard-mode::before{ display:none; }
   min-height:100vh;
   display:flex; flex-direction:column; align-items:center; justify-content:center;
   gap:clamp(24px, 5vh, 64px);
-  background:
-    radial-gradient(ellipse at 20% 15%, rgba(122,42,40,0.55), transparent 55%),
-    radial-gradient(ellipse at 82% 85%, rgba(122,42,40,0.45), transparent 55%),
-    linear-gradient(160deg, var(--forest-dark), #1b271f 60%, #150e0c);
   padding:4vh 4vw;
   overflow:hidden;
+  /* Digeser sedikit ke atas dari titik tengah matematis (50%): logo bulat +
+     nama tim di bagian bawah membuat "berat" visualnya condong ke bawah,
+     jadi kalau dipusatkan persis 50:50 malah kelihatan seperti kegeser ke
+     bawah. Translate ini murni geser tampilan, tidak mengubah perhitungan
+     centering horizontal/flex lainnya — dan karena background gradiennya
+     sekarang ada di body (lihat di atas), geseran ini tidak menyisakan
+     celah warna sama sekali. */
+  transform:translateY(-4vh);
 }
 
 .sb-clock{
@@ -1037,6 +1051,15 @@ body.scoreboard-mode::before{ display:none; }
      angka berapa yang sedang tampil. */
   font-variant-numeric:tabular-nums;
   text-align:center;
+  /* min-width dikunci selebar 3 digit (cukup untuk skor Basket yang bisa
+     tembus 3 digit) — tanpa ini, begin pindah dari 1 digit ke 2 digit
+     (mis. 9 → 10) lebar kotak angkanya ikut membesar, dan karena baris ini
+     di-center sebagai satu kesatuan, KEDUA logo tim ikut tergeser
+     menjauh/mendekat walau cuma satu tim yang skornya berubah. Dengan lebar
+     dikunci, logo & elemen lain jadi benar-benar diam di tempatnya berapa
+     pun digit skornya. */
+  min-width:3ch;
+  display:inline-block;
 }
 .sb-small{
   font-family:'Cormorant Garamond', serif;
