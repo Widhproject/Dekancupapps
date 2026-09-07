@@ -1042,9 +1042,9 @@ body.scoreboard-mode::before{ display:none; }
 
 .sb-row{
   display:flex; align-items:center; justify-content:center;
-  gap:clamp(16px, 2.2vw, 40px);
+  gap:clamp(12px, 1.8vw, 32px);
   width:100%;
-  max-width:96vw;
+  max-width:94vw;
   margin:0 auto;
 }
 
@@ -1095,7 +1095,7 @@ body.scoreboard-mode::before{ display:none; }
 .sb-team-col{ display:flex; flex-direction:column; align-items:center; gap:clamp(10px, 2vh, 18px); }
 .sb-team-name{
   font-family:'Playfair Display', serif; font-weight:700;
-  font-size:clamp(1.3rem, 2.8vw, 2.3rem);
+  font-size:clamp(1.05rem, 2.2vw, 1.75rem);
   letter-spacing:.03em;
   color:var(--paper-light);
   text-align:center;
@@ -1104,30 +1104,30 @@ body.scoreboard-mode::before{ display:none; }
 
 .sb-team{
   flex:0 0 auto;
-  /* Dinaikkan lagi jauh lebih besar dari percobaan sebelumnya (dulu maks
-     260px) — masih dijaga tetap muat oleh max-width di .sb-row. */
-  width:clamp(150px, 20vw, 340px); height:clamp(150px, 20vw, 340px);
+  /* Diperbesar lagi — layout sekarang sudah terjamin muat (lihat max-width
+     di .sb-row), jadi ada ruang untuk logo yang lebih besar dan tegas. */
+  width:clamp(110px, 15vw, 260px); height:clamp(110px, 15vw, 260px);
   display:flex; align-items:center; justify-content:center;
   background:var(--paper-light);
   border-radius:50%;
-  border:5px solid var(--gold-light);
+  border:4px solid var(--gold-light);
   box-shadow:0 10px 40px rgba(0,0,0,0.45);
-  padding:16px;
+  padding:14px;
 }
 .sb-team img{ width:100%; height:100%; object-fit:contain; }
 
 .sb-scores{
   display:flex; align-items:center; justify-content:center;
-  gap:clamp(12px, 1.6vw, 28px);
+  gap:clamp(10px, 1.4vw, 24px);
 }
 .sb-side{
-  display:flex; align-items:baseline; gap:clamp(8px, 1.2vw, 18px);
+  display:flex; align-items:baseline; gap:clamp(8px, 1.1vw, 16px);
 }
 .sb-big{
   font-family:'Playfair Display', serif;
   font-weight:900;
-  /* Dinaikkan lagi dari maks 10rem ke 12.5rem. */
-  font-size:clamp(4rem, 14vw, 12.5rem);
+  /* Diperbesar lagi dari 8rem ke 10rem sebagai batas maksimum. */
+  font-size:clamp(3.5rem, 12vw, 10rem);
   line-height:1;
   color:var(--paper-light);
   text-shadow:0 6px 30px rgba(0,0,0,0.5);
@@ -1139,12 +1139,12 @@ body.scoreboard-mode::before{ display:none; }
 .sb-small{
   font-family:'Cormorant Garamond', serif;
   font-weight:600;
-  font-size:clamp(1.6rem, 4vw, 3rem);
+  font-size:clamp(1.4rem, 3.6vw, 2.6rem);
   color:var(--gold-light);
 }
 .sb-babak-pill{
   display:inline-block;
-  font-size:clamp(1rem, 1.9vw, 1.5rem) !important;
+  font-size:clamp(.85rem, 1.7vw, 1.3rem) !important;
   letter-spacing:.06em;
   text-transform:uppercase;
   background:rgba(212,175,55,0.16);
@@ -1155,7 +1155,7 @@ body.scoreboard-mode::before{ display:none; }
 }
 .sb-sep{
   font-family:'Playfair Display', serif;
-  font-size:clamp(2rem, 5.5vw, 5.2rem);
+  font-size:clamp(1.8rem, 5vw, 4.5rem);
   color:rgba(246,239,223,0.45);
 }
 
@@ -1185,23 +1185,6 @@ body.scoreboard-mode::before{ display:none; }
 }
 
 .sb-idle{ gap:28px; }
-
-/* Baris 3 logo mitra (Kabinet, Dekan Cup FST 2026, BEM KBM FST) di bagian
-   atas layar skor besar saat idle (belum ada pertandingan live) — logo
-   Dekan Cup FST 2026 di tengah dibuat sedikit lebih besar sebagai fokus
-   utama, dua logo lain di kanan-kiri sebagai pendamping. */
-.sb-idle-partners{
-  display:flex; align-items:center; justify-content:center;
-  gap:clamp(20px, 4vw, 56px);
-  margin-bottom:clamp(4px, 1vh, 12px);
-}
-.sb-idle-partners img{
-  height:clamp(56px, 9vw, 120px); width:auto; object-fit:contain;
-  filter:drop-shadow(0 6px 18px rgba(0,0,0,0.35));
-}
-.sb-idle-partners img.sb-idle-partners-main{
-  height:clamp(80px, 13vw, 170px);
-}
 .sb-idle-logo{ width:clamp(140px, 22vw, 320px); height:auto; opacity:.92; filter:drop-shadow(0 10px 30px rgba(0,0,0,0.5)); }
 .sb-idle-text{
   font-family:'Special Elite', monospace;
