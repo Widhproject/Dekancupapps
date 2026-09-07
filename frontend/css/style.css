@@ -1185,6 +1185,23 @@ body.scoreboard-mode::before{ display:none; }
 }
 
 .sb-idle{ gap:28px; }
+
+/* Baris 3 logo mitra (Kabinet, Dekan Cup FST 2026, BEM KBM FST) di bagian
+   atas layar skor besar saat idle (belum ada pertandingan live) — logo
+   Dekan Cup FST 2026 di tengah dibuat sedikit lebih besar sebagai fokus
+   utama, dua logo lain di kanan-kiri sebagai pendamping. */
+.sb-idle-partners{
+  display:flex; align-items:center; justify-content:center;
+  gap:clamp(20px, 4vw, 56px);
+  margin-bottom:clamp(4px, 1vh, 12px);
+}
+.sb-idle-partners img{
+  height:clamp(56px, 9vw, 120px); width:auto; object-fit:contain;
+  filter:drop-shadow(0 6px 18px rgba(0,0,0,0.35));
+}
+.sb-idle-partners img.sb-idle-partners-main{
+  height:clamp(80px, 13vw, 170px);
+}
 .sb-idle-logo{ width:clamp(140px, 22vw, 320px); height:auto; opacity:.92; filter:drop-shadow(0 10px 30px rgba(0,0,0,0.5)); }
 .sb-idle-text{
   font-family:'Special Elite', monospace;

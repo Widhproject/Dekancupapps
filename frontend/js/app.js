@@ -1420,6 +1420,11 @@ function bindAdminControls(m) {
 function scoreboardIdleHTML() {
   return `
   <div class="sb-stage sb-idle">
+    <div class="sb-idle-partners">
+      <img src="assets/logos/kabinet.png" alt="Kabinet" />
+      <img src="assets/logos/dekancup-2026-logo.png" alt="Dekan Cup FST 2026" class="sb-idle-partners-main" />
+      <img src="assets/logos/bem.png" alt="BEM KBM FST" />
+    </div>
     <img class="sb-idle-logo" src="assets/logos/dekancup-emblem.png" alt="Dekan Cup FST" />
     <div class="sb-idle-text">Menunggu pertandingan live…</div>
   </div>`;
