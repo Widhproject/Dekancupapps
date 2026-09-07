@@ -1042,13 +1042,15 @@ body.scoreboard-mode::before{ display:none; }
 
 .sb-row{
   display:flex; align-items:center; justify-content:center;
-  /* Sebelumnya gap ini pakai vw besar (sampai 90px) yang di layar lebar
-     membuat total lebar baris (logo+skor+logo) melebihi viewport — karena
-     .sb-stage overflow:hidden, logo tim jadi terdorong ke luar/tepi layar
-     dan malah tidak kelihatan. Diperkecil supaya logo tetap merapat ke
-     angka skor, senada dengan tampilan kartu skor singkat. */
-  gap:clamp(14px, 2.4vw, 40px);
+  /* Diperkecil lagi + dikasih max-width sebagai jaring pengaman: walau
+     komponen di dalamnya (logo, angka skor) sudah dikecilkan, max-width di
+     sini memastikan total lebar baris TIDAK PERNAH melebihi lebar layar
+     yang tersedia — jadi logo tidak akan pernah lagi terdorong/terpotong
+     di tepi layar berapa pun rasio layarnya. */
+  gap:clamp(10px, 1.6vw, 28px);
   width:100%;
+  max-width:94vw;
+  margin:0 auto;
 }
 
 /* Topbar: badge "LIVE" berkedip pelan + nama ronde/kategori (mis. "SEMI
@@ -1107,9 +1109,13 @@ body.scoreboard-mode::before{ display:none; }
 
 .sb-team{
   flex:0 0 auto;
-  /* Diperbesar sedikit dari clamp(90px,15vw,240px) supaya logo tim lebih
-     menonjol, senada dengan ukuran di kartu skor singkat. */
-  width:clamp(110px, 17vw, 270px); height:clamp(110px, 17vw, 270px);
+  /* Ukuran ditata ulang jadi lebih kecil dari percobaan sebelumnya —
+     kombinasi ukuran logo + jarak sebelumnya membuat total lebar baris
+     (logo+skor+logo) tetap melebihi lebar layar di banyak resolusi,
+     sehingga logo terpotong di tepi. Nilai di bawah ini, ditambah gap
+     yang diperkecil lagi pada .sb-row & .sb-scores, memastikan seluruh
+     baris muat rapi di tengah layar. */
+  width:clamp(90px, 12vw, 200px); height:clamp(90px, 12vw, 200px);
   display:flex; align-items:center; justify-content:center;
   background:var(--paper-light);
   border-radius:50%;
@@ -1121,18 +1127,18 @@ body.scoreboard-mode::before{ display:none; }
 
 .sb-scores{
   display:flex; align-items:center; justify-content:center;
-  /* Diperkecil dari clamp(16px,3vw,48px) — di layar lebar gap ini dulu ikut
-     melebar dan membuat kedua angka skor (dan logo di kanan-kirinya)
-     terdorong menjauh dari pusat. */
-  gap:clamp(10px, 1.6vw, 28px);
+  gap:clamp(8px, 1.2vw, 20px);
 }
 .sb-side{
-  display:flex; align-items:baseline; gap:clamp(8px, 1.4vw, 18px);
+  display:flex; align-items:baseline; gap:clamp(6px, 1vw, 14px);
 }
 .sb-big{
   font-family:'Playfair Display', serif;
   font-weight:900;
-  font-size:clamp(4rem, 16vw, 13rem);
+  /* Ukuran maksimum diperkecil dari 13rem ke 8rem — di layar lebar, angka
+     sebesar itu (ditambah min-width 3 digit di bawah) jadi kontributor
+     terbesar melebarnya baris skor sampai mendorong logo keluar layar. */
+  font-size:clamp(3rem, 10vw, 8rem);
   line-height:1;
   color:var(--paper-light);
   text-shadow:0 6px 30px rgba(0,0,0,0.5);
@@ -1142,25 +1148,22 @@ body.scoreboard-mode::before{ display:none; }
      angka berapa yang sedang tampil. */
   font-variant-numeric:tabular-nums;
   text-align:center;
-  /* min-width dikunci selebar 3 digit (cukup untuk skor Basket yang bisa
-     tembus 3 digit) — tanpa ini, begin pindah dari 1 digit ke 2 digit
-     (mis. 9 → 10) lebar kotak angkanya ikut membesar, dan karena baris ini
-     di-center sebagai satu kesatuan, KEDUA logo tim ikut tergeser
-     menjauh/mendekat walau cuma satu tim yang skornya berubah. Dengan lebar
-     dikunci, logo & elemen lain jadi benar-benar diam di tempatnya berapa
-     pun digit skornya. */
-  min-width:3ch;
+  /* Dikunci selebar 2 digit (cukup untuk hampir semua skor termasuk Voli
+     25+) — sebelumnya 3ch (cadangan skor Basket 3 digit) menambah ruang
+     kosong tak kasat mata di tiap sisi angka walau skornya cuma 1 digit,
+     yang ikut membuat baris keseluruhan lebih lebar dari layar. */
+  min-width:2ch;
   display:inline-block;
 }
 .sb-small{
   font-family:'Cormorant Garamond', serif;
   font-weight:600;
-  font-size:clamp(1.6rem, 4.5vw, 3.4rem);
+  font-size:clamp(1.2rem, 3vw, 2.2rem);
   color:var(--gold-light);
 }
 .sb-babak-pill{
   display:inline-block;
-  font-size:clamp(.85rem, 2vw, 1.3rem) !important;
+  font-size:clamp(.7rem, 1.4vw, 1.05rem) !important;
   letter-spacing:.06em;
   text-transform:uppercase;
   background:rgba(212,175,55,0.16);
@@ -1171,7 +1174,7 @@ body.scoreboard-mode::before{ display:none; }
 }
 .sb-sep{
   font-family:'Playfair Display', serif;
-  font-size:clamp(2rem, 6vw, 5rem);
+  font-size:clamp(1.5rem, 4vw, 3.5rem);
   color:rgba(246,239,223,0.45);
 }
 
