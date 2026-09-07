@@ -904,15 +904,11 @@ a.file-link:hover{
    hanya logo HIMA, skor, dan waktu berjalan.
 ============================================================ */
 body.scoreboard-mode{
-  /* Gradiennya taruh di body (bukan di .sb-stage) supaya tetap menutup penuh
-     layar walau .sb-stage sendiri digeser (transform) untuk keperluan
-     centering vertikal — kalau taruh di .sb-stage, geserannya bisa
-     menyisakan celah warna polos di tepi layar. background-attachment:fixed
-     dari body{} bawaan sudah cukup menjaga ini tetap diam di tempat. */
-  background:
-    radial-gradient(ellipse at 20% 15%, rgba(122,42,40,0.55), transparent 55%),
-    radial-gradient(ellipse at 82% 85%, rgba(122,42,40,0.45), transparent 55%),
-    linear-gradient(160deg, var(--forest-dark), #1b271f 60%, #150e0c);
+  /* Fallback polos doang — background sesungguhnya (preset/gambar sendiri)
+     dirender lewat #sb-bg-layer (lihat di bawah), bukan di body lagi.
+     body cukup punya warna gelap netral supaya tidak ada kedipan warna
+     terang sebelum JS selesai me-render layer background yang sebenarnya. */
+  background:#12140f;
 }
 body.scoreboard-mode .navbar,
 body.scoreboard-mode .footer,
@@ -920,7 +916,92 @@ body.scoreboard-mode .toast-container{ display:none !important; }
 body.scoreboard-mode #app{ min-height:100vh; }
 body.scoreboard-mode::before{ display:none; }
 
+/* Layer background layar skor besar — elemen TERPISAH dari .sb-stage,
+   posisinya fixed menutup penuh layar terlepas dari .sb-stage sendiri yang
+   digeser (transform) untuk keperluan centering vertikal. Kalau backgroundnya
+   ditaruh di .sb-stage langsung, geseran itu akan menyisakan celah warna
+   polos di tepi layar. Preset mana yang aktif ditentukan oleh class
+   .sb-bg-{preset} yang ditambahkan lewat JS (lihat SCOREBOARD_BG_PRESETS
+   di app.js) sesuai pilihan admin — "custom" pakai gambar unggahan sendiri
+   lewat inline style (background-image), preset lain murni CSS gradient. */
+.sb-bg-layer{
+  position:fixed; inset:0; z-index:0;
+  background-size:cover; background-position:center;
+}
+.sb-bg-vintage{
+  background:
+    radial-gradient(ellipse at 20% 15%, rgba(122,42,40,0.55), transparent 55%),
+    radial-gradient(ellipse at 82% 85%, rgba(122,42,40,0.45), transparent 55%),
+    linear-gradient(160deg, var(--forest-dark), #1b271f 60%, #150e0c);
+}
+.sb-bg-midnight{
+  background:
+    radial-gradient(ellipse at 25% 20%, rgba(212,175,55,0.3), transparent 55%),
+    radial-gradient(ellipse at 78% 82%, rgba(212,175,55,0.16), transparent 60%),
+    linear-gradient(160deg, #131a2b, #05060a 72%);
+}
+.sb-bg-sunset{
+  background:
+    radial-gradient(ellipse at 15% 18%, rgba(255,145,66,0.5), transparent 55%),
+    radial-gradient(ellipse at 85% 82%, rgba(182,48,44,0.55), transparent 55%),
+    linear-gradient(160deg, #3d1f2e, #180d16 72%);
+}
+.sb-bg-ocean{
+  background:
+    radial-gradient(ellipse at 20% 15%, rgba(45,123,160,0.5), transparent 55%),
+    radial-gradient(ellipse at 82% 85%, rgba(20,130,120,0.4), transparent 55%),
+    linear-gradient(160deg, #0c2233, #04090f 72%);
+}
+.sb-bg-custom{ background-color:#0d0d0d; }
+/* Scrim gelap di atas gambar sendiri, supaya teks/logo tetap kebaca jelas
+   walau fotonya terang atau ramai — tanpa ini kontras teks bisa hilang
+   tergantung foto yang diunggah admin. */
+.sb-bg-custom::after{
+  content:'';
+  position:absolute; inset:0;
+  background:linear-gradient(160deg, rgba(8,8,8,0.6), rgba(4,4,4,0.8));
+}
+
+/* Galeri pilihan background di Panel Admin — tiap swatch pakai class
+   .sb-bg-{preset} yang SAMA dengan yang dipakai di layar besar sungguhan,
+   supaya pratinjaunya representatif (bukan cuma warna kira-kira). */
+.bg-preset-grid{
+  display:grid; grid-template-columns:repeat(auto-fill, minmax(130px, 1fr));
+  gap:12px; margin:10px 0 14px;
+}
+.bg-preset-swatch{
+  position:relative; overflow:hidden;
+  height:76px; border-radius:10px; cursor:pointer;
+  border:2px solid var(--line);
+  background-size:cover; background-position:center;
+  display:flex; align-items:flex-end;
+  transition:border-color .15s ease, transform .15s ease;
+}
+.bg-preset-swatch:hover{ transform:translateY(-2px); }
+.bg-preset-swatch.active{ border-color:var(--maroon); box-shadow:0 0 0 2px rgba(122,42,40,0.25); }
+.bg-preset-swatch-label{
+  font-family:'Special Elite', monospace; font-size:.68rem; letter-spacing:.04em;
+  color:#fff; text-shadow:0 1px 4px rgba(0,0,0,0.7);
+  padding:5px 8px; width:100%;
+  background:linear-gradient(transparent, rgba(0,0,0,0.55));
+}
+.bg-preset-swatch-check{
+  position:absolute; top:6px; right:6px;
+  width:20px; height:20px; border-radius:50%;
+  background:var(--maroon); color:#fff;
+  display:flex; align-items:center; justify-content:center;
+  font-size:.7rem;
+}
+.bg-preset-swatch.custom-empty{
+  display:flex; align-items:center; justify-content:center;
+  background:var(--paper-dark); border-style:dashed;
+}
+.bg-preset-swatch.custom-empty .bg-preset-swatch-label{
+  background:none; color:var(--ink); text-shadow:none; text-align:center; width:auto; padding:0;
+}
+
 .sb-stage{
+  position:relative; z-index:1;
   min-height:100vh;
   display:flex; flex-direction:column; align-items:center; justify-content:center;
   gap:clamp(24px, 5vh, 64px);
@@ -959,22 +1040,10 @@ body.scoreboard-mode::before{ display:none; }
   100%{ box-shadow:0 0 0 0 rgba(226,84,79,0); }
 }
 
-/* Grid (bukan flex) sengaja dipakai di sini: kolom kiri & kanan pakai
-   minmax(0,1fr) supaya kolom logo tim BENAR-BENAR bisa menyusut kalau ruang
-   sempit (mis. di layar 1920px saat skor + pill "BABAK" di tengah sudah
-   makan banyak tempat) — bukan malah terdorong keluar viewport lalu
-   kepotong overflow:hidden di .sb-stage. Flexbox versi lama tidak bisa
-   menjamin ini karena flex item defaultnya tidak mau menyusut di bawah
-   ukuran alami kontennya kecuali diberi aturan tambahan; grid-track
-   minmax(0, 1fr) memang dirancang khusus untuk kasus "jangan pernah
-   overflow" seperti ini. */
 .sb-row{
-  display:grid;
-  grid-template-columns:minmax(0, 1fr) auto minmax(0, 1fr);
-  align-items:center; justify-items:center;
-  gap:clamp(12px, 3vw, 90px);
+  display:flex; align-items:center; justify-content:center;
+  gap:clamp(20px, 5vw, 90px);
   width:100%;
-  max-width:100%;
 }
 
 /* Topbar: badge "LIVE" berkedip pelan + nama ronde/kategori (mis. "SEMI
@@ -1020,17 +1089,8 @@ body.scoreboard-mode::before{ display:none; }
 }
 
 /* Bungkus logo (lingkaran) + nama kode tim di bawahnya jadi satu kolom,
-   supaya nama timnya tidak numpuk di dalam lingkaran logo.
-   min-width:0 + width:100% WAJIB ada di sini: tanpa ini, kolom grid
-   minmax(0,1fr) di .sb-row tidak akan pernah benar-benar menyusut karena
-   ukuran minimum bawaan flex/grid item itu ikut ukuran alami kontennya,
-   bukan 0 — jadi logo tetap bisa terdorong keluar layar walau kolomnya
-   sendiri sudah dibuat fleksibel. */
-.sb-team-col{
-  display:flex; flex-direction:column; align-items:center;
-  gap:clamp(10px, 2vh, 18px);
-  min-width:0; width:100%;
-}
+   supaya nama timnya tidak numpuk di dalam lingkaran logo. */
+.sb-team-col{ display:flex; flex-direction:column; align-items:center; gap:clamp(10px, 2vh, 18px); }
 .sb-team-name{
   font-family:'Playfair Display', serif; font-weight:700;
   font-size:clamp(1.05rem, 2.2vw, 1.75rem);
@@ -1038,33 +1098,23 @@ body.scoreboard-mode::before{ display:none; }
   color:var(--paper-light);
   text-align:center;
   text-shadow:0 2px 10px rgba(0,0,0,0.55);
-  max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
 }
 
 .sb-team{
   flex:0 0 auto;
-  /* min() (bukan clamp px murni) supaya logo ikut menyusut kalau kolom
-     grid-nya kepepet sempit (lihat catatan .sb-team-col di atas) — patokan
-     ukuran "normal"-nya tetap sama seperti sebelumnya (maks ~240px atau
-     15% lebar layar), tapi sekarang ada lapisan pengaman tambahan: tidak
-     akan pernah melebihi 100% lebar kolom yang tersedia. */
-  width:min(240px, 15vw, 100%);
-  aspect-ratio:1/1;
-  max-width:100%;
+  width:clamp(90px, 15vw, 240px); height:clamp(90px, 15vw, 240px);
   display:flex; align-items:center; justify-content:center;
   background:var(--paper-light);
   border-radius:50%;
   border:4px solid var(--gold-light);
   box-shadow:0 10px 40px rgba(0,0,0,0.45);
   padding:14px;
-  box-sizing:border-box;
 }
 .sb-team img{ width:100%; height:100%; object-fit:contain; }
 
 .sb-scores{
   display:flex; align-items:center; justify-content:center;
   gap:clamp(16px, 3vw, 48px);
-  min-width:0;
 }
 .sb-side{
   display:flex; align-items:baseline; gap:clamp(8px, 1.4vw, 18px);
@@ -1072,14 +1122,7 @@ body.scoreboard-mode::before{ display:none; }
 .sb-big{
   font-family:'Playfair Display', serif;
   font-weight:900;
-  /* Sebelumnya maks 13rem — di layar/jendela lebar sedang (mis. laptop
-     1280-1366px, umum dipakai proyektor kampus yang bukan Full HD asli)
-     ukuran semaksimal itu menghabiskan nyaris semua ruang horizontal,
-     sehingga logo tim kebagian sisa sangat sempit walau sudah tidak
-     kepotong lagi. Diturunkan ke 8.5rem — tetap besar & jelas terbaca dari
-     jarak jauh, tapi menyisakan ruang jauh lebih banyak untuk logo di
-     kedua sisi pada lebar layar yang umum dipakai. */
-  font-size:clamp(3rem, 11vw, 8.5rem);
+  font-size:clamp(4rem, 16vw, 13rem);
   line-height:1;
   color:var(--paper-light);
   text-shadow:0 6px 30px rgba(0,0,0,0.5);
@@ -1157,11 +1200,7 @@ body.scoreboard-mode::before{ display:none; }
 }
 
 @media (max-width: 700px){
-  /* Grid 1 kolom (bukan lagi flex-direction:column) — logo home, blok
-     skor, dan logo away tetap tersusun sesuai urutan DOM-nya (atas ke
-     bawah), konsisten dengan perilaku lama sebelum .sb-row diubah jadi
-     grid untuk memperbaiki masalah logo kepotong di layar lebar. */
-  .sb-row{ grid-template-columns:1fr; gap:18px; }
+  .sb-row{ flex-direction:column; gap:18px; }
   .sb-sep{ display:none; }
   .sb-fouls{ gap:14px; }
 }

@@ -90,6 +90,24 @@ export const db = load();
   if (changed) save();
 })();
 
+// Migrasi: instalasi lama yang event_config-nya sudah pernah dibuat (sebelum
+// fitur "atur background layar skor besar" ada) belum punya 2 field ini —
+// tanpa migrasi, GET /config/event akan mengembalikan scoreboard_bg_preset:
+// undefined dan frontend tidak tahu preset mana yang harus dianggap aktif.
+(function migrateScoreboardBgConfig() {
+  if (!db.event_config) return;
+  let changed = false;
+  if (db.event_config.scoreboard_bg_preset === undefined) {
+    db.event_config.scoreboard_bg_preset = 'vintage';
+    changed = true;
+  }
+  if (db.event_config.scoreboard_bg_custom_url === undefined) {
+    db.event_config.scoreboard_bg_custom_url = null;
+    changed = true;
+  }
+  if (changed) save();
+})();
+
 export function save() {
   // Tulis ke file sementara lalu rename, supaya file JSON tidak korup kalau proses berhenti di tengah tulis
   const tmpPath = `${dbPath}.tmp`;
@@ -223,6 +241,11 @@ function seed() {
       logo_url: 'assets/dekancup-logo.svg',
       bem_logo_url: 'assets/logos/bem.svg',
       kabinet_logo_url: 'assets/logos/kabinet.svg',
+      // Background layar skor besar (/layar) — lihat daftar preset di
+      // frontend (SCOREBOARD_BG_PRESETS di app.js). 'vintage' = tampilan
+      // gradien maroon-hijau tua yang sudah ada sejak awal.
+      scoreboard_bg_preset: 'vintage',
+      scoreboard_bg_custom_url: null,
     };
   }
 

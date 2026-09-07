@@ -1429,6 +1429,35 @@ function scoreboardIdleHTML() {
 // Voli dan cabor lain ditampilkan tanpa timer — cukup logo & skor saja.
 const SPORTS_WITH_TIMER = ['Basket'];
 
+// Pilihan background layar skor besar (/layar) — dipilih admin lewat Panel
+// Admin > Background Layar Skor Besar. class-nya (sb-bg-{id}) dipakai
+// bareng di dua tempat: layar besar sungguhan (app.js route('/layar')) dan
+// pratinjau swatch di panel admin — lihat .sb-bg-* & .bg-preset-swatch di
+// style.css. 'custom' otomatis ditambahkan ke daftar ini oleh
+// scoreboardBgPresetOptions() begitu admin pernah unggah gambar sendiri.
+const SCOREBOARD_BG_PRESETS = [
+  { id: 'vintage', label: 'Vintage (Bawaan)' },
+  { id: 'midnight', label: 'Malam Emas' },
+  { id: 'sunset', label: 'Sunset Stadium' },
+  { id: 'ocean', label: 'Ocean' },
+];
+
+// Terapkan konfigurasi background (preset atau gambar sendiri) ke elemen
+// #sb-bg-layer. Dipanggil sekali saat halaman /layar dimuat, dan lagi setiap
+// kali ada event socket 'scoreboard_bg_updated' (admin ganti background dari
+// device lain) — supaya layar besar yang sedang menyala di venue ikut
+// berubah otomatis tanpa perlu di-refresh manual.
+function applyScoreboardBg(bgLayerEl, config) {
+  if (!bgLayerEl || !config) return;
+  const validIds = [...SCOREBOARD_BG_PRESETS.map((p) => p.id), 'custom'];
+  const preset = validIds.includes(config.scoreboard_bg_preset) ? config.scoreboard_bg_preset : 'vintage';
+  validIds.forEach((id) => bgLayerEl.classList.remove(`sb-bg-${id}`));
+  bgLayerEl.classList.add(`sb-bg-${preset}`);
+  bgLayerEl.style.backgroundImage = (preset === 'custom' && config.scoreboard_bg_custom_url)
+    ? `url('${config.scoreboard_bg_custom_url}')`
+    : '';
+}
+
 // Label "babak yang dimenangkan" disesuaikan istilah per cabor supaya lebih
 // natural dibaca di layar besar — Voli pakai "Set" (istilah baku voli),
 // cabor lain pakai "Babak" (generik).
@@ -1487,8 +1516,20 @@ function scoreboardMatchHTML(m) {
 }
 
 route('/layar', async () => {
-  app.innerHTML = `<div id="sb-root"></div>`;
+  app.innerHTML = `<div id="sb-bg-layer" class="sb-bg-layer"></div><div id="sb-root"></div>`;
   const root = document.getElementById('sb-root');
+  const bgLayer = document.getElementById('sb-bg-layer');
+
+  // Muat & terapkan background pilihan admin. Dibungkus try/catch: kalau
+  // gagal (mis. server belum sempat migrasi field baru), layar besar tetap
+  // tampil dengan fallback CSS bawaan (.sb-bg-layer polos) alih-alih blank.
+  try {
+    const config = await api('/himas/config/event');
+    applyScoreboardBg(bgLayer, config);
+  } catch (err) {
+    console.warn('Layar skor: gagal memuat konfigurasi background.', err);
+    applyScoreboardBg(bgLayer, { scoreboard_bg_preset: 'vintage' });
+  }
 
   let current = null; // id pertandingan yang sedang ditampilkan
   let currentSportType = null; // dipakai supaya listener socket tahu label "Set"/"Babak" yang benar tanpa perlu refetch
@@ -1576,6 +1617,7 @@ route('/layar', async () => {
       }
     });
     currentSocket.on('schedule_changed', refresh);
+    currentSocket.on('scoreboard_bg_updated', (config) => applyScoreboardBg(bgLayer, config));
   } catch (err) {
     console.warn('Layar skor: real-time socket tidak tersedia, memakai polling saja.', err);
   }
@@ -2277,11 +2319,17 @@ const ADMIN_OPEN_SECTIONS = {
   'registrations': false,
   'athlete-profile': false,
   'all-matches': false,
+  'scoreboard-bg': false,
 };
 
 route('/admin', async () => {
   if (!isAdmin()) { location.hash = '/login'; return; }
-  const [matches, himas, sportConfig] = await Promise.all([api('/matches'), api('/himas?team_only=true'), api('/registrations/config')]);
+  const [matches, himas, sportConfig, scoreboardConfig] = await Promise.all([
+    api('/matches'),
+    api('/himas?team_only=true'),
+    api('/registrations/config'),
+    api('/himas/config/event'),
+  ]);
   const himaOptions = himas.map((h) => `<option value="${h.id}">${h.code}</option>`).join('');
 
   // Ikon panah bawah untuk penanda buka/tutup tiap section — dirotasi 180°
@@ -2313,6 +2361,37 @@ route('/admin', async () => {
             ternyata ikut ter-reset.
           </p>
           <button class="btn primary" id="btn-download-backup" type="button">⬇️ Unduh Backup (.json)</button>
+        </div>
+      </details>
+
+      <details class="admin-score-box admin-section" data-section-key="scoreboard-bg" ${sectionOpen('scoreboard-bg')}>
+        <summary>
+          <div class="admin-section-title">Background Layar Skor Besar<small>Atur tampilan halaman /layar untuk proyektor/TV di venue</small></div>
+          <span class="chevron">${CHEVRON_ICON}</span>
+        </summary>
+        <div class="admin-section-body">
+          <p class="mc-meta" style="margin-bottom:6px;">Pilih salah satu tampilan di bawah, atau unggah foto/gambar sendiri. Perubahan langsung tampil di layar besar yang sedang menyala (tanpa perlu refresh manual).</p>
+          <div class="bg-preset-grid" id="bg-preset-grid">
+            ${SCOREBOARD_BG_PRESETS.map((p) => `
+              <div class="bg-preset-swatch sb-bg-${p.id} ${scoreboardConfig.scoreboard_bg_preset === p.id ? 'active' : ''}" data-preset="${p.id}">
+                ${scoreboardConfig.scoreboard_bg_preset === p.id ? '<div class="bg-preset-swatch-check">✓</div>' : ''}
+                <div class="bg-preset-swatch-label">${p.label}</div>
+              </div>
+            `).join('')}
+            ${scoreboardConfig.scoreboard_bg_custom_url ? `
+              <div class="bg-preset-swatch ${scoreboardConfig.scoreboard_bg_preset === 'custom' ? 'active' : ''}" data-preset="custom" style="background-image:url('${scoreboardConfig.scoreboard_bg_custom_url}')">
+                ${scoreboardConfig.scoreboard_bg_preset === 'custom' ? '<div class="bg-preset-swatch-check">✓</div>' : ''}
+                <div class="bg-preset-swatch-label">Gambar Sendiri</div>
+              </div>
+            ` : `
+              <div class="bg-preset-swatch custom-empty">
+                <div class="bg-preset-swatch-label">Belum ada gambar sendiri</div>
+              </div>
+            `}
+          </div>
+          <input type="file" id="bg-upload-input" accept="image/*" style="display:none;" />
+          <button class="btn small ghost" id="btn-upload-bg" type="button">📷 ${scoreboardConfig.scoreboard_bg_custom_url ? 'Ganti' : 'Unggah'} Gambar Sendiri</button>
+          <p class="mc-meta" style="margin-top:6px;">Format gambar biasa (JPG/PNG/WebP), maksimal 8 MB. Disarankan foto yang tidak terlalu ramai di bagian tengah, karena logo & skor akan ditampilkan menimpa di atasnya.</p>
         </div>
       </details>
 
@@ -2518,6 +2597,9 @@ route('/admin', async () => {
   });
 
   // Opsi Kategori mengikuti cabor yang dipilih (mis. Futsal → Putra/Putri,
+  // Badminton → Ganda Putra/Ganda Putri/Campuran) — diambil dari SPORT_CONFIG
+  // yang sama dipakai formulir pendaftaran, supaya penamaan kategori selalu
+  // konsisten antara jadwal pertandingan & data pendaftaran tim.
   document.getElementById('btn-download-backup').addEventListener('click', async () => {
     const btn = document.getElementById('btn-download-backup');
     btn.disabled = true;
@@ -2544,9 +2626,46 @@ route('/admin', async () => {
     }
   });
 
-  // Badminton → Ganda Putra/Ganda Putri/Campuran) — diambil dari SPORT_CONFIG
-  // yang sama dipakai formulir pendaftaran, supaya penamaan kategori selalu
-  // konsisten antara jadwal pertandingan & data pendaftaran tim.
+  // Background layar skor besar: klik salah satu swatch preset → langsung
+  // PATCH (tanpa perlu tombol simpan terpisah, biar cepat dicoba-coba admin
+  // saat gladi bersih), atau unggah gambar sendiri lewat file input
+  // tersembunyi yang dipicu oleh tombol "Unggah/Ganti Gambar Sendiri".
+  document.querySelectorAll('#bg-preset-grid [data-preset]').forEach((swatch) => {
+    swatch.addEventListener('click', async () => {
+      const preset = swatch.dataset.preset;
+      if (preset === 'custom' && !scoreboardConfig.scoreboard_bg_custom_url) return; // belum ada gambar yg diunggah
+      try {
+        await api('/himas/config/event', { method: 'PATCH', auth: true, body: { scoreboard_bg_preset: preset } });
+        toast('Background layar skor besar diperbarui');
+        router();
+      } catch (err) { toast(err.message); }
+    });
+  });
+
+  const bgUploadInput = document.getElementById('bg-upload-input');
+  document.getElementById('btn-upload-bg').addEventListener('click', () => bgUploadInput.click());
+  bgUploadInput.addEventListener('change', async () => {
+    const file = bgUploadInput.files[0];
+    if (!file) return;
+    if (file.size > 8 * 1024 * 1024) { toast('Ukuran file maksimal 8 MB'); bgUploadInput.value = ''; return; }
+    const fd = new FormData();
+    fd.append('background', file);
+    try {
+      const res = await fetch(`${API_BASE}/himas/config/scoreboard-bg`, {
+        method: 'POST', headers: { Authorization: `Bearer ${getToken()}` }, body: fd,
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.message || 'Gagal mengunggah gambar');
+      }
+      toast('Gambar berhasil diunggah & langsung dipakai');
+      router();
+    } catch (err) {
+      toast(err.message);
+      bgUploadInput.value = '';
+    }
+  });
+
   const nmSportSelect = document.getElementById('nm-sport');
   const nmCategorySelect = document.getElementById('nm-category');
   const refreshCategoryOptions = () => {

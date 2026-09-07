@@ -191,7 +191,9 @@
     "faculty_name": "Fakultas Sains dan Teknologi",
     "logo_url": "assets/dekancup-logo.svg",
     "bem_logo_url": "assets/logos/bem.svg",
-    "kabinet_logo_url": "assets/logos/kabinet.svg"
+    "kabinet_logo_url": "assets/logos/kabinet.svg",
+    "scoreboard_bg_preset": "vintage",
+    "scoreboard_bg_custom_url": null
   },
   "sport_limits": {
     "Futsal": {

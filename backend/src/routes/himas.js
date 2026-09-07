@@ -1,8 +1,13 @@
 import { Router } from 'express';
 import { v4 as uuid } from 'uuid';
+import multer from 'multer';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { db, save } from '../db.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const router = Router();
 
 // Label tampilan untuk satu grup roster (sport_type + category). Dipakai
@@ -135,10 +140,71 @@ router.patch('/config/event', requireAuth, requireAdmin, (req, res) => {
     'logo_url',
     'bem_logo_url',
     'kabinet_logo_url',
+    // 'custom' otomatis diset lewat endpoint upload di bawah begitu admin
+    // unggah file — di sini cukup terima nilai preset bawaan (vintage,
+    // midnight, sunset, ocean) yang dipilih dari galeri pilihan.
+    'scoreboard_bg_preset',
   ]);
   save();
 
+  const io = req.app.get('io');
+  io.emit('scoreboard_bg_updated', db.event_config);
+
   res.json(db.event_config);
+});
+
+// ============================================================
+// BACKGROUND LAYAR SKOR BESAR — upload gambar sendiri (file diunggah
+// langsung dari device admin, bukan URL), disimpan di
+// backend/uploads/scoreboard-bg dan disajikan lewat static route /uploads
+// (lihat server.js). Pola sama seperti upload foto pertandingan.
+// ============================================================
+const scoreboardBgDir = path.join(__dirname, '..', '..', 'uploads', 'scoreboard-bg');
+fs.mkdirSync(scoreboardBgDir, { recursive: true });
+
+const bgStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, scoreboardBgDir),
+  filename: (req, file, cb) => cb(null, `${uuid()}${path.extname(file.originalname) || '.jpg'}`),
+});
+const uploadBg = multer({
+  storage: bgStorage,
+  limits: { fileSize: 8 * 1024 * 1024 }, // maks 8 MB, samakan dengan validasi di frontend
+  fileFilter: (req, file, cb) => {
+    if (!file.mimetype.startsWith('image/')) {
+      return cb(new Error('File harus berupa gambar'));
+    }
+    cb(null, true);
+  },
+});
+function uploadScoreboardBg(req, res, next) {
+  uploadBg.single('background')(req, res, (err) => {
+    if (err) return res.status(400).json({ message: err.message || 'Gagal mengunggah gambar' });
+    next();
+  });
+}
+
+// Unggah background sendiri — otomatis jadi preset aktif ('custom') begitu berhasil.
+router.post('/config/scoreboard-bg', requireAuth, requireAdmin, uploadScoreboardBg, (req, res) => {
+  if (!req.file) return res.status(400).json({ message: 'File gambar wajib diisi' });
+
+  // File lama (kalau ada) dihapus supaya folder upload tidak menumpuk file
+  // yatim tiap kali admin ganti-ganti gambar.
+  const oldFilename = db.event_config.scoreboard_bg_custom_url
+    ? path.basename(db.event_config.scoreboard_bg_custom_url)
+    : null;
+  if (oldFilename) {
+    fs.unlink(path.join(scoreboardBgDir, oldFilename), () => {});
+  }
+
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  db.event_config.scoreboard_bg_custom_url = `${baseUrl}/uploads/scoreboard-bg/${req.file.filename}`;
+  db.event_config.scoreboard_bg_preset = 'custom';
+  save();
+
+  const io = req.app.get('io');
+  io.emit('scoreboard_bg_updated', db.event_config);
+
+  res.status(201).json(db.event_config);
 });
 
 export default router;
