@@ -1042,7 +1042,12 @@ body.scoreboard-mode::before{ display:none; }
 
 .sb-row{
   display:flex; align-items:center; justify-content:center;
-  gap:clamp(20px, 5vw, 90px);
+  /* Sebelumnya gap ini pakai vw besar (sampai 90px) yang di layar lebar
+     membuat total lebar baris (logo+skor+logo) melebihi viewport — karena
+     .sb-stage overflow:hidden, logo tim jadi terdorong ke luar/tepi layar
+     dan malah tidak kelihatan. Diperkecil supaya logo tetap merapat ke
+     angka skor, senada dengan tampilan kartu skor singkat. */
+  gap:clamp(14px, 2.4vw, 40px);
   width:100%;
 }
 
@@ -1102,7 +1107,9 @@ body.scoreboard-mode::before{ display:none; }
 
 .sb-team{
   flex:0 0 auto;
-  width:clamp(90px, 15vw, 240px); height:clamp(90px, 15vw, 240px);
+  /* Diperbesar sedikit dari clamp(90px,15vw,240px) supaya logo tim lebih
+     menonjol, senada dengan ukuran di kartu skor singkat. */
+  width:clamp(110px, 17vw, 270px); height:clamp(110px, 17vw, 270px);
   display:flex; align-items:center; justify-content:center;
   background:var(--paper-light);
   border-radius:50%;
@@ -1114,7 +1121,10 @@ body.scoreboard-mode::before{ display:none; }
 
 .sb-scores{
   display:flex; align-items:center; justify-content:center;
-  gap:clamp(16px, 3vw, 48px);
+  /* Diperkecil dari clamp(16px,3vw,48px) — di layar lebar gap ini dulu ikut
+     melebar dan membuat kedua angka skor (dan logo di kanan-kirinya)
+     terdorong menjauh dari pusat. */
+  gap:clamp(10px, 1.6vw, 28px);
 }
 .sb-side{
   display:flex; align-items:baseline; gap:clamp(8px, 1.4vw, 18px);
