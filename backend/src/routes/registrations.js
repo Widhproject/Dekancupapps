@@ -64,7 +64,9 @@ export const SPORT_CONFIG = {
       },
     ],
   },
-  Catur: { categories: ['Catur'], minPlayers: 4, maxPlayers: 4, templateUrl: 'https://docs.google.com/document/d/1q_EMgIg-XYeQ3FrrX78g7xNqVEVpRqIHQOdTlbgl81M/edit?tab=t.0', forceMajeureUrl: 'https://drive.google.com/file/d/1JB8LOxjcvxd4o5xZAn9nEUbHfCR0pZ24/view?pli=1' },
+  // Catur: 3 atlet per HIMA (main sistem 3 papan — lihat backend/src/routes/matches.js,
+  // endpoint PATCH /matches/:id/boards) — bukan 4 seperti sebelumnya.
+  Catur: { categories: ['Catur'], minPlayers: 3, maxPlayers: 3, templateUrl: 'https://docs.google.com/document/d/1q_EMgIg-XYeQ3FrrX78g7xNqVEVpRqIHQOdTlbgl81M/edit?tab=t.0', forceMajeureUrl: 'https://drive.google.com/file/d/1JB8LOxjcvxd4o5xZAn9nEUbHfCR0pZ24/view?pli=1' },
   'Band Competition': {
     categories: ['Band Competition'], minPlayers: 3, maxPlayers: 10,
     templateUrl: 'https://docs.google.com/document/d/1q_EMgIg-XYeQ3FrrX78g7xNqVEVpRqIHQOdTlbgl81M/edit?tab=t.0', forceMajeureUrl: 'https://drive.google.com/file/d/1JB8LOxjcvxd4o5xZAn9nEUbHfCR0pZ24/view?pli=1',

@@ -93,7 +93,7 @@ function fmtDate(str) {
 }
 
 const STATUS_LABEL = { scheduled: 'Belum Mulai', live: 'Live', finished: 'Selesai' };
-const SPORT_TYPES = ['Futsal', 'Basket', 'Voli', 'Badminton', 'E-Sport Mobile Legends'];
+const SPORT_TYPES = ['Futsal', 'Basket', 'Voli', 'Badminton', 'E-Sport Mobile Legends', 'Catur'];
 
 // Ikon cabor: dulu pakai emoji (rendering-nya beda-beda tiap OS/browser dan
 // suka pecah/kotak di beberapa perangkat), sekarang diganti ikon SVG garis
@@ -138,6 +138,13 @@ const SPORT_EVENT_BUTTONS = {
   ],
   Voli: [
     { type: 'timeout', label: '⏱️ Time Out' },
+    { type: 'note', label: '📝 Catatan' },
+  ],
+  // Catur tidak punya gol/kartu/pergantian — kejadian yang relevan cuma
+  // catatan bebas (mis. "Papan 2 menang WO karena atlet away tidak hadir").
+  // Hasil per papan sendiri diinput lewat editor "Papan Catur" di
+  // adminControlsHTML, bukan lewat tombol kejadian ini.
+  Catur: [
     { type: 'note', label: '📝 Catatan' },
   ],
 };
@@ -186,7 +193,8 @@ const SPORT_CONFIG = {
       },
     ],
   },
-  Catur: { categories: ['Catur'], minPlayers: 4, maxPlayers: 4, icon: SPORT_ICONS.catur, templateUrl: 'https://docs.google.com/document/d/1q_EMgIg-XYeQ3FrrX78g7xNqVEVpRqIHQOdTlbgl81M/edit?tab=t.0', forceMajeureUrl: 'https://drive.google.com/file/d/1JB8LOxjcvxd4o5xZAn9nEUbHfCR0pZ24/view?pli=1' },
+  // 3 atlet per HIMA (main sistem 3 papan, lihat scoreboardMatchHTML/adminControlsHTML).
+  Catur: { categories: ['Catur'], minPlayers: 3, maxPlayers: 3, icon: SPORT_ICONS.catur, templateUrl: 'https://docs.google.com/document/d/1q_EMgIg-XYeQ3FrrX78g7xNqVEVpRqIHQOdTlbgl81M/edit?tab=t.0', forceMajeureUrl: 'https://drive.google.com/file/d/1JB8LOxjcvxd4o5xZAn9nEUbHfCR0pZ24/view?pli=1' },
   'Band Competition': {
     categories: ['Band Competition'], minPlayers: 3, maxPlayers: 10, icon: SPORT_ICONS.band,
     templateUrl: 'https://docs.google.com/document/d/1q_EMgIg-XYeQ3FrrX78g7xNqVEVpRqIHQOdTlbgl81M/edit?tab=t.0', forceMajeureUrl: 'https://drive.google.com/file/d/1JB8LOxjcvxd4o5xZAn9nEUbHfCR0pZ24/view?pli=1',
@@ -937,6 +945,7 @@ route('/match/:id', async ({ params }) => {
             <div class="name">${m.away_hima.code}</div>
           </div>
         </div>
+        ${m.sport_type === 'Catur' ? chessBoardsPublicHTML(m) : ''}
         <div class="mc-meta" style="margin-top:14px;">${fmtDate(m.match_date)} · ${m.venue || ''}</div>
 
         <div class="event-feed">
@@ -993,6 +1002,15 @@ route('/match/:id', async ({ params }) => {
       adminState.awayFouls = away_fouls ?? 0;
     }
     if (admin) toast('Skor diperbarui!');
+  });
+  currentSocket.on('boards_updated', (payload) => {
+    m.boards = payload.boards;
+    bumpScoreEl(document.getElementById('home-score'), payload.home_score);
+    bumpScoreEl(document.getElementById('away-score'), payload.away_score);
+    const publicBox = document.getElementById('chess-boards-public');
+    if (publicBox) publicBox.outerHTML = chessBoardsPublicHTML(m);
+    if (adminState) { adminState.home = payload.home_score; adminState.away = payload.away_score; }
+    if (admin) toast('Hasil papan diperbarui!');
   });
   currentSocket.on('timer_updated', (payload) => {
     // Supaya kalau ada 2 admin buka halaman yang sama, timernya tetap sinkron.
@@ -1062,14 +1080,88 @@ function eventItemHTML(ev, m) {
   </div>`;
 }
 
+// Format hasil 1 papan jadi notasi catur yang lazim ("1–0" / "½–½" / "0–1"),
+// selalu dari sudut pandang tim HOME dulu (konsisten dengan urutan skor total
+// di seluruh situs ini) — "belum ada hasil" ditampilkan sebagai "–".
+function fmtBoardResult(result) {
+  if (result === 'home') return '1–0';
+  if (result === 'away') return '0–1';
+  if (result === 'draw') return '½–½';
+  return '–';
+}
+
+// Tampilan skor gaya notasi catur ("1½" bukan "1.5") — dipakai khusus untuk
+// menampilkan total poin Catur di layar skor besar & kartu pertandingan,
+// karena "1.5" terlihat aneh untuk pembaca yang familiar dengan catur.
+function fmtChessScore(n) {
+  if (n === null || n === undefined) return '0';
+  const whole = Math.floor(n);
+  const isHalf = Math.abs(n - whole - 0.5) < 1e-6;
+  if (!isHalf) return String(n);
+  return whole > 0 ? `${whole}½` : '½';
+}
+
+// Kartu ringkas "hasil 3 papan" yang ditampilkan di halaman detail pertandingan
+// (untuk SEMUA pengunjung, bukan cuma admin) — nama atlet + hasil tiap papan.
+function chessBoardsPublicHTML(m) {
+  const boards = (m.boards && m.boards.length ? m.boards : [1, 2, 3].map((n) => ({ board_no: n, home_player: null, away_player: null, result: null })));
+  return `
+  <div class="chess-boards-public" id="chess-boards-public" style="margin-top:16px;">
+    <h3 style="margin-bottom:8px;">♞ Hasil per Papan</h3>
+    ${boards.map((b, i) => `
+    <div class="chess-board-public-row">
+      <span class="chess-board-public-no">Papan ${i + 1}</span>
+      <span class="chess-board-public-player">${b.home_player || m.home_hima.code}</span>
+      <span class="chess-board-public-result">${fmtBoardResult(b.result)}</span>
+      <span class="chess-board-public-player">${b.away_player || m.away_hima.code}</span>
+    </div>`).join('')}
+  </div>`;
+}
+
+// Editor "papan" untuk Catur — 3 baris (papan 1-3), tiap baris berisi nama
+// atlet home & away (bebas isi tangan, dibantu autocomplete dari roster
+// pendaftaran lewat <datalist>, diisi belakangan oleh bindAdminControls
+// begitu roster-nya berhasil di-fetch) + hasil papan itu (Menang/Seri/Kalah).
+// Skor total (poin) DIHITUNG OTOMATIS dari 3 hasil ini di backend — admin
+// tidak pernah mengetik skor total secara manual untuk Catur.
+function chessBoardsEditorHTML(m) {
+  const boards = (m.boards && m.boards.length ? m.boards : [1, 2, 3].map((n) => ({ board_no: n, home_player: null, away_player: null, result: null })));
+  return `
+  <div class="eyebrow">Papan Catur (3 papan berjalan sekaligus)</div>
+  <p class="mc-meta">Isi nama atlet tiap papan (opsional) lalu pilih hasilnya. Poin total (Menang=1, Seri=½) dihitung otomatis.</p>
+  <div class="chess-boards" id="chess-boards">
+    ${boards.map((b, i) => `
+    <div class="chess-board-row" data-board-no="${i + 1}">
+      <span class="chess-board-no">Papan ${i + 1}</span>
+      <input type="text" class="chess-player-input" data-side="home" maxlength="80"
+        placeholder="Atlet ${m.home_hima.code}" value="${b.home_player || ''}" list="chess-roster-home" />
+      <select class="chess-result-select">
+        <option value="" ${!b.result ? 'selected' : ''}>Belum ada hasil</option>
+        <option value="home" ${b.result === 'home' ? 'selected' : ''}>${m.home_hima.code} menang (1–0)</option>
+        <option value="draw" ${b.result === 'draw' ? 'selected' : ''}>Seri (½–½)</option>
+        <option value="away" ${b.result === 'away' ? 'selected' : ''}>${m.away_hima.code} menang (0–1)</option>
+      </select>
+      <input type="text" class="chess-player-input" data-side="away" maxlength="80"
+        placeholder="Atlet ${m.away_hima.code}" value="${b.away_player || ''}" list="chess-roster-away" />
+    </div>`).join('')}
+  </div>
+  <datalist id="chess-roster-home"></datalist>
+  <datalist id="chess-roster-away"></datalist>
+  <div class="chess-total-readout mc-meta">
+    Total poin saat ini: <strong>${m.home_hima.code} ${m.home_score}</strong> — <strong>${m.away_score} ${m.away_hima.code}</strong>
+  </div>`;
+}
+
 function adminControlsHTML(m) {
   const isBasket = m.sport_type === 'Basket';
   const isVoli = m.sport_type === 'Voli';
+  const isCatur = m.sport_type === 'Catur';
   const hasTimer = SPORTS_WITH_TIMER.includes(m.sport_type);
 
   return `
   <div class="admin-score-box" style="margin-top:18px;">
     <div class="eyebrow">Panel Admin · Live Score</div>
+    ${isCatur ? chessBoardsEditorHTML(m) : `
     <div class="score-controls">
       <div class="team">
         <strong>${m.home_hima.code}</strong>
@@ -1134,7 +1226,7 @@ function adminControlsHTML(m) {
           <button class="btn small primary" data-babak-adj="away" data-delta="1">+1</button>
         </div>
       </div>
-    </div>
+    </div>` }
 
     ${isBasket ? `
     <div class="eyebrow" style="margin-top:14px;">Foul Tim (untuk layar skor besar)</div>
@@ -1202,12 +1294,66 @@ function adminControlsHTML(m) {
 // device admin lain lewat socket — lihat komentar di listener 'score_updated'
 // pada route('/match/:id'). Kalau cuma pakai variabel `let` biasa di sini,
 // closure-nya tidak bisa diakses dari luar sehingga rawan "lost update".
+// Ambil daftar nama atlet Catur yang terdaftar untuk 1 HIMA (dari roster
+// pendaftaran), dipakai untuk mengisi <datalist> autocomplete di editor
+// papan — supaya admin bisa pilih dari yang sudah terdaftar, tapi tetap
+// bebas mengetik nama lain kalau perlu (mis. atlet pengganti dadakan).
+async function fetchChessRosterNames(himaId) {
+  try {
+    const hima = await api(`/himas/${himaId}`);
+    const group = (hima.roster_by_sport || []).find((g) => g.sport_type === 'Catur');
+    return (group?.players || []).map((p) => p.name).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+// Kumpulkan isi 3 baris editor papan Catur dari DOM jadi array `boards`
+// yang siap dikirim ke PATCH /matches/:id/boards.
+function readChessBoardsFromDom() {
+  return Array.from(document.querySelectorAll('#chess-boards .chess-board-row')).map((row, i) => ({
+    board_no: i + 1,
+    home_player: row.querySelector('[data-side="home"]').value.trim() || null,
+    away_player: row.querySelector('[data-side="away"]').value.trim() || null,
+    result: row.querySelector('.chess-result-select').value || null,
+  }));
+}
+
 function bindAdminControls(m) {
   const state = {
     home: m.home_score, away: m.away_score,
     homeBabak: m.home_babak || 0, awayBabak: m.away_babak || 0,
     homeFouls: m.home_fouls || 0, awayFouls: m.away_fouls || 0,
   };
+
+  // ---- Catur: editor 3 papan (bukan tombol +1/-1 seperti cabor lain) ----
+  if (m.sport_type === 'Catur' && document.getElementById('chess-boards')) {
+    // Isi <datalist> autocomplete nama atlet dari roster pendaftaran —
+    // dijalankan di belakang (tidak menghalangi render), boleh gagal diam-diam.
+    fetchChessRosterNames(m.home_hima_id).then((names) => {
+      const dl = document.getElementById('chess-roster-home');
+      if (dl) dl.innerHTML = names.map((n) => `<option value="${n}"></option>`).join('');
+    });
+    fetchChessRosterNames(m.away_hima_id).then((names) => {
+      const dl = document.getElementById('chess-roster-away');
+      if (dl) dl.innerHTML = names.map((n) => `<option value="${n}"></option>`).join('');
+    });
+
+    const saveBoards = async () => {
+      try {
+        const res = await api(`/matches/${m.id}/boards`, { method: 'PATCH', auth: true, body: { boards: readChessBoardsFromDom() } });
+        state.home = res.home_score; state.away = res.away_score;
+        bumpScoreEl(document.getElementById('home-score'), res.home_score);
+        bumpScoreEl(document.getElementById('away-score'), res.away_score);
+        const readout = document.querySelector('.chess-total-readout');
+        if (readout) readout.innerHTML = `Total poin saat ini: <strong>${m.home_hima.code} ${res.home_score}</strong> — <strong>${res.away_score} ${m.away_hima.code}</strong>`;
+      } catch (err) { toast(err.message); }
+    };
+    document.querySelectorAll('#chess-boards .chess-result-select').forEach((el) => el.addEventListener('change', saveBoards));
+    // Nama atlet cukup disimpan saat kolomnya kehilangan fokus (blur), bukan
+    // tiap ketikan huruf — supaya tidak nembak API tiap 1 huruf yang diketik.
+    document.querySelectorAll('#chess-boards .chess-player-input').forEach((el) => el.addEventListener('blur', saveBoards));
+  }
 
   document.querySelectorAll('[data-adj]').forEach((btn) => {
     btn.addEventListener('click', async () => {
@@ -1465,10 +1611,24 @@ function sbBabakLabel(sportType) {
   return sportType === 'Voli' ? 'Set' : 'Babak';
 }
 
+// Baris kecil "hasil per papan" di layar skor besar, khusus Catur — dipasang
+// menggantikan pil "Set/Babak" (yang tidak relevan buat Catur, karena tidak
+// ada konsep set/babak di sini, cuma 3 papan yang hasilnya langsung
+// menyumbang ke skor total).
+function sbBoardsRowHTML(m) {
+  const boards = (m.boards && m.boards.length ? m.boards : [1, 2, 3].map((n) => ({ board_no: n, result: null })));
+  return `<div class="sb-boards-row" id="sb-boards-row">
+    ${boards.map((b, i) => `<span class="sb-board-pill">Papan ${i + 1} · ${fmtBoardResult(b.result)}</span>`).join('')}
+  </div>`;
+}
+
 function scoreboardMatchHTML(m) {
   const showTimer = SPORTS_WITH_TIMER.includes(m.sport_type);
+  const isCatur = m.sport_type === 'Catur';
   const babakLabel = sbBabakLabel(m.sport_type);
   const roundText = [m.round_name, m.category].filter(Boolean).join(' · ') || m.sport_type;
+  const homeScoreText = isCatur ? fmtChessScore(m.home_score) : m.home_score;
+  const awayScoreText = isCatur ? fmtChessScore(m.away_score) : m.away_score;
   return `
   <div class="sb-stage">
     <div class="sb-topbar">
@@ -1485,13 +1645,13 @@ function scoreboardMatchHTML(m) {
       </div>
       <div class="sb-scores">
         <div class="sb-side">
-          <span class="sb-big" id="sb-home-score">${m.home_score}</span>
-          <span class="sb-small sb-babak-pill" id="sb-home-babak">${babakLabel} ${m.home_babak || 0}</span>
+          <span class="sb-big" id="sb-home-score">${homeScoreText}</span>
+          ${isCatur ? '' : `<span class="sb-small sb-babak-pill" id="sb-home-babak">${babakLabel} ${m.home_babak || 0}</span>`}
         </div>
         <div class="sb-sep">–</div>
         <div class="sb-side">
-          <span class="sb-small sb-babak-pill" id="sb-away-babak">${babakLabel} ${m.away_babak || 0}</span>
-          <span class="sb-big" id="sb-away-score">${m.away_score}</span>
+          ${isCatur ? '' : `<span class="sb-small sb-babak-pill" id="sb-away-babak">${babakLabel} ${m.away_babak || 0}</span>`}
+          <span class="sb-big" id="sb-away-score">${awayScoreText}</span>
         </div>
       </div>
       <div class="sb-team-col">
@@ -1501,6 +1661,7 @@ function scoreboardMatchHTML(m) {
         <div class="sb-team-name">${m.away_hima.code}</div>
       </div>
     </div>
+    ${isCatur ? sbBoardsRowHTML(m) : ''}
     ${showTimer ? `
     <div class="sb-fouls">
       <div class="sb-foul-box">
@@ -1568,12 +1729,15 @@ route('/layar', async () => {
       // di bawah) supaya cuma memicu saat memang ada perubahan sungguhan.
       const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
       const babakLabel = sbBabakLabel(m.sport_type);
-      set('sb-home-score', m.home_score);
-      set('sb-away-score', m.away_score);
+      const isCaturNow = m.sport_type === 'Catur';
+      set('sb-home-score', isCaturNow ? fmtChessScore(m.home_score) : m.home_score);
+      set('sb-away-score', isCaturNow ? fmtChessScore(m.away_score) : m.away_score);
       set('sb-home-babak', `${babakLabel} ${m.home_babak || 0}`);
       set('sb-away-babak', `${babakLabel} ${m.away_babak || 0}`);
       set('sb-home-fouls', m.home_fouls || 0);
       set('sb-away-fouls', m.away_fouls || 0);
+      const boardsRow = document.getElementById('sb-boards-row');
+      if (isCaturNow && boardsRow) boardsRow.outerHTML = sbBoardsRowHTML(m);
       setTimerText();
     }
   }
@@ -1603,6 +1767,16 @@ route('/layar', async () => {
         set('sb-away-babak', `${babakLabel} ${payload.away_babak || 0}`);
         set('sb-home-fouls', payload.home_fouls || 0);
         set('sb-away-fouls', payload.away_fouls || 0);
+      } else {
+        refresh();
+      }
+    });
+    currentSocket.on('live_boards_updated', (payload) => {
+      if (payload.id === current) {
+        bumpScoreEl(document.getElementById('sb-home-score'), fmtChessScore(payload.home_score));
+        bumpScoreEl(document.getElementById('sb-away-score'), fmtChessScore(payload.away_score));
+        const boardsRow = document.getElementById('sb-boards-row');
+        if (boardsRow) boardsRow.outerHTML = sbBoardsRowHTML({ boards: payload.boards });
       } else {
         refresh();
       }
@@ -2403,7 +2577,7 @@ route('/admin', async () => {
         <div class="admin-section-body">
           <form id="new-match-form" class="form-grid-2" style="gap:10px;">
             <div class="filter-group"><label>Cabang Olahraga</label>
-              <select id="nm-sport"><option>Futsal</option><option>Basket</option><option>Voli</option><option>Badminton</option><option>E-Sport Mobile Legends</option></select>
+              <select id="nm-sport"><option>Futsal</option><option>Basket</option><option>Voli</option><option>Badminton</option><option>E-Sport Mobile Legends</option><option>Catur</option></select>
             </div>
             <div class="filter-group"><label>Kategori</label>
               <select id="nm-category"></select>

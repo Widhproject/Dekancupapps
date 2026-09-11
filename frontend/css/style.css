@@ -773,6 +773,47 @@ a.file-link:hover{
   background:var(--paper-light); font-size:.85rem; font-family:inherit;
 }
 
+/* ============ CATUR — EDITOR PAPAN (admin) & TAMPILAN PUBLIK ============ */
+.chess-boards{ display:flex; flex-direction:column; gap:10px; margin-top:10px; }
+.chess-board-row{
+  display:grid; grid-template-columns:auto 1fr auto 1fr; align-items:center; gap:8px;
+  padding:10px 12px; background:var(--paper); border:1px solid var(--line); border-radius:var(--radius-sm);
+}
+.chess-board-no{
+  font-family:'Special Elite', monospace; font-size:.7rem; letter-spacing:.05em; text-transform:uppercase;
+  color:var(--forest); white-space:nowrap;
+}
+.chess-player-input{
+  padding:7px 9px; border:1px solid var(--line); border-radius:var(--radius-xs);
+  background:var(--paper-light); font-size:.82rem; font-family:inherit; width:100%;
+}
+.chess-result-select{
+  padding:7px 9px; border:1px solid var(--line); border-radius:var(--radius-xs);
+  background:var(--paper-light); font-size:.78rem; font-family:inherit; grid-column:1/-1;
+}
+@media (min-width:640px){
+  .chess-result-select{ grid-column:auto; }
+}
+.chess-total-readout{ margin-top:10px; text-align:center; }
+
+.chess-boards-public{
+  background:var(--paper); border:1px solid var(--line); border-radius:var(--radius-sm); padding:12px 14px;
+}
+.chess-board-public-row{
+  display:grid; grid-template-columns:auto 1fr auto 1fr; align-items:center; gap:8px; padding:6px 0;
+  font-size:.88rem;
+}
+.chess-board-public-row + .chess-board-public-row{ border-top:1px dashed var(--line); }
+.chess-board-public-no{
+  font-family:'Special Elite', monospace; font-size:.65rem; letter-spacing:.05em; text-transform:uppercase;
+  color:var(--forest); white-space:nowrap;
+}
+.chess-board-public-player{ color:var(--ink); }
+.chess-board-public-player:last-child{ text-align:right; }
+.chess-board-public-result{
+  font-family:'Playfair Display', serif; font-weight:700; text-align:center; color:var(--maroon);
+}
+
 .login-box{
   max-width:380px; margin:var(--space-7) auto; background:var(--paper-light); border:1px solid var(--line);
   border-radius:var(--radius-md); padding:var(--space-6); box-shadow:var(--shadow); text-align:center;
@@ -1184,6 +1225,28 @@ body.scoreboard-mode::before{ display:none; }
   color:var(--paper-light);
 }
 
+/* Breakdown 3 papan Catur di layar skor besar — menggantikan pil Set/Babak
+   (lihat sbBoardsRowHTML() & scoreboardMatchHTML() di app.js), karena
+   konsep "babak yang dimenangkan" tidak relevan untuk Catur (3 papan
+   berjalan sekaligus, bukan berurutan). */
+.sb-boards-row{
+  display:flex; align-items:center; justify-content:center; flex-wrap:wrap;
+  gap:clamp(10px, 2vw, 22px);
+  margin-top:clamp(14px, 3vh, 34px);
+  width:100%;
+}
+.sb-board-pill{
+  font-family:'Cormorant Garamond', serif;
+  font-weight:600;
+  font-size:clamp(1rem, 2.2vw, 1.5rem);
+  color:var(--paper-light);
+  background:rgba(0,0,0,0.22);
+  border:1px solid rgba(212,175,55,0.35);
+  border-radius:999px;
+  padding:.45em 1.2em;
+  white-space:nowrap;
+}
+
 .sb-idle{ gap:28px; }
 .sb-idle-logo{ width:clamp(140px, 22vw, 320px); height:auto; opacity:.92; filter:drop-shadow(0 10px 30px rgba(0,0,0,0.5)); }
 .sb-idle-text{
@@ -1197,6 +1260,7 @@ body.scoreboard-mode::before{ display:none; }
   .sb-row{ flex-direction:column; gap:18px; }
   .sb-sep{ display:none; }
   .sb-fouls{ gap:14px; }
+  .sb-boards-row{ gap:10px; }
 }
 
 /* ---------- Registrasi Peserta ---------- */

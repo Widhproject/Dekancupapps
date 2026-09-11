@@ -16,6 +16,14 @@ import { SPORT_CONFIG } from './registrations.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const router = Router();
 
+// Format default 3 papan untuk cabor Catur (lihat komentar panjang di
+// PATCH /:id/boards di bawah) — dipakai untuk match Catur lama yang belum
+// punya field `boards` sama sekali, supaya frontend selalu menerima bentuk
+// array yang konsisten (3 slot kosong) alih-alih undefined.
+function defaultBoards() {
+  return [1, 2, 3].map((board_no) => ({ board_no, home_player: null, away_player: null, result: null }));
+}
+
 function attachHimas(match) {
   const pickPublicFields = (h) =>
     h ? { id: h.id, code: h.code, full_name: h.full_name, logo_url: h.logo_url, color: h.color } : null;
@@ -29,6 +37,11 @@ function attachHimas(match) {
     category: match.category ?? null,
     home_babak: match.home_babak ?? 0,
     away_babak: match.away_babak ?? 0,
+    // Khusus Catur: rincian 3 papan (atlet vs atlet + hasil per papan).
+    // Match sport lain tidak pernah punya field ini — dibiarkan undefined
+    // sengaja tidak dipaksa ada, supaya payload match sport lain tidak
+    // membengkak tanpa guna.
+    boards: match.sport_type === 'Catur' ? (match.boards && match.boards.length ? match.boards : defaultBoards()) : undefined,
     // Hitung foul per tim (khusus Basket) — ditampilkan di layar skor besar
     // dan bisa diatur admin persis seperti skor.
     home_fouls: match.home_fouls ?? 0,
@@ -273,6 +286,76 @@ router.patch('/:id/score', requireAuth, requireAdmin, (req, res) => {
   // Broadcast global juga (tidak terikat room), dipakai oleh layar skor besar yang
   // otomatis mengikuti pertandingan mana pun yang sedang live.
   io.emit('live_score_updated', { id: match.id, ...payload });
+
+  res.json(attachHimas(match));
+});
+
+// ============================================================
+// CATUR — SKOR PER PAPAN (BOARD)
+// ============================================================
+// Beda dari cabor lain: 1 pertandingan Catur = 3 papan berjalan sekaligus
+// (masing-masing 1 atlet HIMA tuan rumah vs 1 atlet HIMA tamu). Skor total
+// HIMA (home_score/away_score) = akumulasi poin dari 3 papan itu (Menang=1,
+// Seri=½, Kalah=0) — BUKAN diketik manual admin lewat tombol +1/-1 seperti
+// cabor lain, makanya dibuatkan endpoint terpisah dari /:id/score.
+//
+// Sengaja tidak lewat sanitizeCount() (yang membulatkan ke bilangan bulat
+// terdekat) karena hasil Seri (½ poin) HARUS bisa tersimpan sebagai desimal
+// .5 — kalau dibulatkan, seri jadi tidak beda dengan kalah/menang di skor
+// total, dan penonton di layar besar tidak akan tahu papan mana yang
+// sebenarnya seri.
+const BOARD_RESULTS = ['home', 'draw', 'away', null];
+
+function sanitizeBoards(input) {
+  if (!Array.isArray(input) || input.length === 0) return null;
+  return input.slice(0, 3).map((b, i) => ({
+    board_no: i + 1,
+    home_player: (b?.home_player || '').toString().trim().slice(0, 80) || null,
+    away_player: (b?.away_player || '').toString().trim().slice(0, 80) || null,
+    result: BOARD_RESULTS.includes(b?.result) ? b.result : null,
+  }));
+}
+
+// Poin dari satu papan, dari sudut pandang tim tuan rumah & tim tamu.
+function boardPoints(result) {
+  if (result === 'home') return [1, 0];
+  if (result === 'away') return [0, 1];
+  if (result === 'draw') return [0.5, 0.5];
+  return [0, 0]; // belum selesai / belum dimulai
+}
+
+router.patch('/:id/boards', requireAuth, requireAdmin, (req, res) => {
+  const match = db.matches.find((m) => m.id === req.params.id);
+  if (!match) return res.status(404).json({ message: 'Pertandingan tidak ditemukan' });
+  if (match.sport_type !== 'Catur') {
+    return res.status(400).json({ message: 'Endpoint ini khusus untuk pertandingan Catur' });
+  }
+  if (!canManageSport(req.user, match.sport_type)) {
+    return res.status(403).json({ message: `Akun Anda tidak diizinkan mengelola cabor ${match.sport_type}` });
+  }
+
+  const boards = sanitizeBoards(req.body.boards);
+  if (!boards) return res.status(400).json({ message: 'Data papan tidak valid (kirim array `boards`)' });
+
+  match.boards = boards;
+  // Hitung ulang skor total dari akumulasi 3 papan — sengaja SELALU dihitung
+  // ulang dari `boards` (bukan dipercaya dari body request) supaya skor
+  // total tidak bisa "nyasar" tidak sinkron dengan hasil papan yang
+  // sebenarnya tersimpan.
+  let home_score = 0, away_score = 0;
+  for (const b of boards) {
+    const [hp, ap] = boardPoints(b.result);
+    home_score += hp; away_score += ap;
+  }
+  match.home_score = home_score;
+  match.away_score = away_score;
+  match.updated_at = nowStr();
+  save();
+
+  const io = req.app.get('io');
+  const payload = { home_score: match.home_score, away_score: match.away_score, boards: match.boards };
+  io.to(`match_${req.params.id}`).emit('boards_updated', payload);
+  io.emit('live_boards_updated', { id: match.id, ...payload });
 
   res.json(attachHimas(match));
 });
