@@ -832,6 +832,17 @@ a.file-link:hover{
 .individual-standings-hima img{ width:22px; height:22px; object-fit:contain; border-radius:50%; }
 .individual-standings-table tbody tr:first-child td{ font-weight:700; background:rgba(212,175,55,0.12); }
 
+/* Pembungkus scroll horizontal — WAJIB untuk tabel dengan banyak kolom
+   (klasemen individu Catur: 8 kolom) di layar HP, supaya tabel tidak
+   memaksa lebar seluruh halaman melebar / kepotong, dan tetap bisa dibaca
+   lengkap dengan gesek ke samping. */
+.table-scroll{
+  overflow-x:auto;
+  -webkit-overflow-scrolling:touch;
+  border-radius:var(--radius-sm);
+}
+.table-scroll .roster-table{ min-width:520px; }
+
 .login-box{
   max-width:380px; margin:var(--space-7) auto; background:var(--paper-light); border:1px solid var(--line);
   border-radius:var(--radius-md); padding:var(--space-6); box-shadow:var(--shadow); text-align:center;
@@ -1427,6 +1438,11 @@ label .sport-icon-svg{ margin-right:.3em; }
   .nav-toggle{ width:40px; height:40px; }
   .roster-group-title{ min-height:44px; }
   .player-status{ min-height:26px; }
+  /* Klasemen individu Catur: padding & font dikecilkan sedikit di HP —
+     tabelnya tetap full 8 kolom (lihat .table-scroll di atas untuk cara
+     scroll-nya), ini cuma supaya tiap kolom lebih ringkas per-gesernya. */
+  .individual-standings-table th, .individual-standings-table td{ padding:5px 8px; font-size:.8rem; }
+  .individual-standings-hima img{ width:18px; height:18px; }
 }
 
 /* ============================================================

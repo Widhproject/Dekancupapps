@@ -1906,6 +1906,35 @@ function bracketColumnMatchesHTML(roundMatches, roundIdx) {
 
 route('/bagan', async ({ query }) => {
   const sport = query.sport || 'Futsal';
+
+  // Catur tidak main sistem gugur (bracket) — formatnya round-robin antar
+  // HIMA dengan 3 papan per pertandingan (lihat diskusi fitur boards di
+  // matches.js), jadi "bagan pohon turnamen" tidak relevan untuk
+  // ditampilkan di sini. Untuk Catur, halaman /bagan langsung menampilkan
+  // Klasemen Individu-nya saja — bukan link/banner seperti sebelumnya,
+  // supaya orang yang klik tab "Bagan" pas cabor-nya Catur tidak perlu
+  // klik 1 kali lagi buat sampai ke klasemen yang sebenarnya mereka cari.
+  if (sport === 'Catur') {
+    const sectionHTML = await individualStandingsSectionHTML(sport);
+    app.innerHTML = `
+      <div class="wrap">
+        <div class="section-head">
+          <div><div class="eyebrow">Klasemen Individu</div><h2>${sport}</h2></div>
+          <div class="filter-group">
+            <label>Cabang Olahraga</label>
+            <select id="sport-select">
+              ${SPORT_TYPES.map((s) => `<option ${s === sport ? 'selected' : ''}>${s}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+        ${sectionHTML}
+      </div>`;
+    document.getElementById('sport-select').addEventListener('change', (e) => {
+      location.hash = `/bagan?sport=${encodeURIComponent(e.target.value)}`;
+    });
+    return;
+  }
+
   // Kategori (mis. Putra/Putri) dipilih terpisah dari cabor — kalau belum
   // dipilih lewat URL, pakai kategori pertama yang tersedia untuk cabor ini
   // (lihat SPORT_CONFIG). Ini mencegah bagan mencampur pertandingan Putra &
@@ -1950,11 +1979,6 @@ route('/bagan', async ({ query }) => {
           </select>
         </div>` : ''}
       </div>
-      ${sport === 'Catur' ? `
-      <div class="chess-individual-link-banner">
-        ♞ Ingin lihat rekap poin per atlet, bukan per HIMA?
-        <a href="#/klasemen-individu?sport=Catur" data-route="/klasemen-individu">Lihat Klasemen Individu Catur →</a>
-      </div>` : ''}
       ${roundNames.length ? `
       <div class="bracket-board" id="bracket-board">
         <div class="bracket-board-inner" id="bracket-board-inner">
@@ -1995,23 +2019,20 @@ route('/bagan', async ({ query }) => {
 });
 
 // ============================================================
-// HALAMAN: KLASEMEN INDIVIDU (khusus cabor yang punya data papan/board,
-// saat ini cuma Catur — lihat endpoint GET /matches/individual-standings)
+// KLASEMEN INDIVIDU — dipakai di 2 tempat: halaman /bagan (saat sport =
+// Catur, bagan digantikan tampilan ini) & halaman /klasemen-individu
+// (link mandiri, mis. dari kartu "Hasil per Papan" di detail match).
+// Dipisah jadi 1 fungsi supaya keduanya selalu konsisten & sekali perbaiki.
 // ============================================================
-route('/klasemen-individu', async ({ query }) => {
-  const sport = query.sport || 'Catur';
+async function individualStandingsSectionHTML(sport) {
   const rows = await api(`/matches/individual-standings/${encodeURIComponent(sport)}`);
-
-  app.innerHTML = `
-    <div class="wrap">
-      <div class="section-head">
-        <div><div class="eyebrow">Rekap Poin Atlet</div><h2>Klasemen Individu · ${sport}</h2></div>
-      </div>
+  return `
       <p class="mc-meta" style="margin-bottom:14px;">
         Dihitung dari seluruh hasil papan (board) di semua pertandingan ${sport} yang sudah punya hasil.
         Menang = 1 poin, Seri = ½ poin, Kalah = 0 poin.
       </p>
       ${rows.length ? `
+      <div class="table-scroll">
       <table class="roster-table individual-standings-table">
         <thead>
           <tr>
@@ -2034,7 +2055,24 @@ route('/klasemen-individu', async ({ query }) => {
             <td><strong>${fmtChessScore(r.points)}</strong></td>
           </tr>`).join('')}
         </tbody>
-      </table>` : emptyState('Belum ada hasil papan yang tercatat untuk cabor ini.')}
+      </table>
+      </div>` : emptyState('Belum ada hasil papan yang tercatat untuk cabor ini.')}`;
+}
+
+// ============================================================
+// HALAMAN: KLASEMEN INDIVIDU (khusus cabor yang punya data papan/board,
+// saat ini cuma Catur — lihat endpoint GET /matches/individual-standings)
+// ============================================================
+route('/klasemen-individu', async ({ query }) => {
+  const sport = query.sport || 'Catur';
+  const sectionHTML = await individualStandingsSectionHTML(sport);
+
+  app.innerHTML = `
+    <div class="wrap">
+      <div class="section-head">
+        <div><div class="eyebrow">Rekap Poin Atlet</div><h2>Klasemen Individu · ${sport}</h2></div>
+      </div>
+      ${sectionHTML}
     </div>`;
 });
 
