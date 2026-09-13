@@ -596,6 +596,66 @@ function reverseStandings(match) {
   db.standings = db.standings.filter((s) => s.played > 0);
 }
 
+// ============================================================
+// CATUR — REKAP POIN INDIVIDU
+// ============================================================
+// Beda dari klasemen tim (db.standings, yang cuma tahu total skor per HIMA),
+// rekap ini dihitung LANGSUNG dari data `boards` tiap pertandingan Catur —
+// sengaja tidak disimpan sebagai tabel terpisah, supaya:
+//  1) Admin cuma perlu isi hasil papan sekali (lewat editor papan), rekap
+//     individu otomatis ikut benar tanpa input ganda.
+//  2) Kalau ada hasil papan yang dikoreksi/match dihapus, rekap otomatis
+//     ikut benar di request berikutnya — tidak perlu logika "reverse" seperti
+//     reverseStandings() di atas.
+// Konsekuensinya: dihitung ulang dari nol tiap kali endpoint ini dipanggil.
+// Untuk skala 1 turnamen fakultas ini masih sangat ringan (paling banter
+// ratusan match), jadi tidak perlu dioptimasi/di-cache.
+router.get('/individual-standings/:sport_type', (req, res) => {
+  const sport = req.params.sport_type;
+  // Kunci pengelompokan pakai `hima_id + nama atlet (dinormalisasi)` — bukan
+  // cuma nama — supaya kalau ada 2 HIMA yang kebetulan punya atlet dengan
+  // nama sama persis, tidak ketuker jadi 1 orang. Normalisasi (trim +
+  // lowercase) dipakai HANYA untuk kunci pengelompokan; nama yang
+  // ditampilkan tetap pakai versi asli yang pertama kali muncul, supaya
+  // kapitalisasi rapi tidak berubah-ubah cuma karena admin lain pernah
+  // ngetik dengan huruf kecil semua.
+  const table = new Map();
+
+  const addResult = (hima, playerName, outcome) => {
+    if (!hima || !playerName) return; // papan tanpa nama atlet dilewati — tidak ada yang direkap
+    const key = `${hima.id}::${playerName.trim().toLowerCase()}`;
+    let row = table.get(key);
+    if (!row) {
+      row = {
+        player_name: playerName.trim(),
+        hima_id: hima.id, hima_code: hima.code, hima_full_name: hima.full_name, hima_logo_url: hima.logo_url,
+        played: 0, won: 0, drawn: 0, lost: 0, points: 0,
+      };
+      table.set(key, row);
+    }
+    row.played += 1;
+    if (outcome === 'win') { row.won += 1; row.points += 1; }
+    else if (outcome === 'draw') { row.drawn += 1; row.points += 0.5; }
+    else { row.lost += 1; }
+  };
+
+  for (const match of db.matches) {
+    if (match.sport_type !== sport || !Array.isArray(match.boards)) continue;
+    const home = db.himas.find((h) => h.id === match.home_hima_id);
+    const away = db.himas.find((h) => h.id === match.away_hima_id);
+    for (const b of match.boards) {
+      if (!b || !b.result) continue; // papan yang belum ada hasilnya belum ikut dihitung
+      addResult(home, b.home_player, b.result === 'home' ? 'win' : b.result === 'draw' ? 'draw' : 'loss');
+      addResult(away, b.away_player, b.result === 'away' ? 'win' : b.result === 'draw' ? 'draw' : 'loss');
+    }
+  }
+
+  const rows = [...table.values()].sort((a, b) =>
+    b.points - a.points || b.won - a.won || a.player_name.localeCompare(b.player_name)
+  );
+  res.json(rows);
+});
+
 // GET klasemen per cabang olahraga
 router.get('/standings/:sport_type', (req, res) => {
   const rows = db.standings

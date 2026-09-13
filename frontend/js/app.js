@@ -1115,6 +1115,7 @@ function chessBoardsPublicHTML(m) {
       <span class="chess-board-public-result">${fmtBoardResult(b.result)}</span>
       <span class="chess-board-public-player">${b.away_player || m.away_hima.code}</span>
     </div>`).join('')}
+    <a href="#/klasemen-individu?sport=Catur" data-route="/klasemen-individu" class="chess-individual-link">Lihat Klasemen Individu Catur →</a>
   </div>`;
 }
 
@@ -1949,6 +1950,11 @@ route('/bagan', async ({ query }) => {
           </select>
         </div>` : ''}
       </div>
+      ${sport === 'Catur' ? `
+      <div class="chess-individual-link-banner">
+        ♞ Ingin lihat rekap poin per atlet, bukan per HIMA?
+        <a href="#/klasemen-individu?sport=Catur" data-route="/klasemen-individu">Lihat Klasemen Individu Catur →</a>
+      </div>` : ''}
       ${roundNames.length ? `
       <div class="bracket-board" id="bracket-board">
         <div class="bracket-board-inner" id="bracket-board-inner">
@@ -1986,6 +1992,50 @@ route('/bagan', async ({ query }) => {
     const cleanup = () => { window.removeEventListener('resize', redraw); };
     window.addEventListener('hashchange', cleanup, { once: true });
   }
+});
+
+// ============================================================
+// HALAMAN: KLASEMEN INDIVIDU (khusus cabor yang punya data papan/board,
+// saat ini cuma Catur — lihat endpoint GET /matches/individual-standings)
+// ============================================================
+route('/klasemen-individu', async ({ query }) => {
+  const sport = query.sport || 'Catur';
+  const rows = await api(`/matches/individual-standings/${encodeURIComponent(sport)}`);
+
+  app.innerHTML = `
+    <div class="wrap">
+      <div class="section-head">
+        <div><div class="eyebrow">Rekap Poin Atlet</div><h2>Klasemen Individu · ${sport}</h2></div>
+      </div>
+      <p class="mc-meta" style="margin-bottom:14px;">
+        Dihitung dari seluruh hasil papan (board) di semua pertandingan ${sport} yang sudah punya hasil.
+        Menang = 1 poin, Seri = ½ poin, Kalah = 0 poin.
+      </p>
+      ${rows.length ? `
+      <table class="roster-table individual-standings-table">
+        <thead>
+          <tr>
+            <th>#</th><th>Atlet</th><th>HIMA</th><th>Main</th><th>M</th><th>S</th><th>K</th><th>Poin</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map((r, i) => `
+          <tr>
+            <td>${i + 1}</td>
+            <td>${r.player_name}</td>
+            <td class="individual-standings-hima">
+              <img src="${r.hima_logo_url}" onerror="this.src='assets/logos/_placeholder.svg'" />
+              ${r.hima_code}
+            </td>
+            <td>${r.played}</td>
+            <td>${r.won}</td>
+            <td>${r.drawn}</td>
+            <td>${r.lost}</td>
+            <td><strong>${fmtChessScore(r.points)}</strong></td>
+          </tr>`).join('')}
+        </tbody>
+      </table>` : emptyState('Belum ada hasil papan yang tercatat untuk cabor ini.')}
+    </div>`;
 });
 
 // ============================================================
