@@ -1468,3 +1468,58 @@ label .sport-icon-svg{ margin-right:.3em; }
   display:inline-block;
   animation:score-slide-up .65s cubic-bezier(.22,1,.36,1);
 }
+
+/* ============================================================
+   TIKET MASUK PENONTON — kartu tiket QR ("/tiket/:kode") yang di-
+   screenshot penonton, dan tampilan scanner kamera di Panel Admin.
+============================================================ */
+.ticket-card{
+  background:var(--paper-light);
+  border:2px solid var(--gold, var(--line));
+  border-radius:var(--radius-md, 14px);
+  padding:28px 22px;
+  text-align:center;
+  box-shadow:0 12px 32px rgba(0,0,0,0.12);
+}
+.ticket-qr{
+  width:100%; max-width:260px; aspect-ratio:1/1;
+  margin:16px auto; display:block;
+  border:1px solid var(--line); border-radius:8px; padding:8px; background:#fff;
+}
+.ticket-code{
+  font-family:'Playfair Display', serif; font-weight:800;
+  font-size:1.6rem; letter-spacing:.12em;
+  margin-top:6px;
+}
+.ticket-buyer{ font-size:1.05rem; margin-top:2px; color:var(--ink-soft, var(--ink)); }
+.ticket-used-banner{
+  background:#7a2a28; color:#fff; padding:10px 14px; border-radius:8px;
+  font-size:.85rem; font-weight:600; margin-bottom:16px;
+}
+
+/* Scanner tiket admin — area video kamera + hasil scan */
+.scan-video-wrap{
+  position:relative; width:100%; max-width:420px; margin:0 auto;
+  border-radius:12px; overflow:hidden; background:#000; aspect-ratio:1/1;
+}
+.scan-video-wrap video{ width:100%; height:100%; object-fit:cover; }
+.scan-video-frame{
+  position:absolute; inset:12%; border:3px solid rgba(255,255,255,0.85);
+  border-radius:12px; pointer-events:none;
+  box-shadow:0 0 0 999px rgba(0,0,0,0.35);
+}
+.scan-result{
+  margin-top:14px; padding:14px 16px; border-radius:10px; font-weight:600; text-align:center;
+}
+.scan-result.ok{ background:#20452f; color:#eafff0; }
+.scan-result.bad{ background:#7a2a28; color:#ffeceb; }
+.scan-manual-row{ display:flex; gap:8px; margin-top:14px; }
+.scan-manual-row input{ flex:1; text-transform:uppercase; letter-spacing:.08em; }
+
+/* Tabel sederhana buat daftar tiket di Panel Admin */
+.admin-table{ width:100%; border-collapse:collapse; font-size:.88rem; }
+.admin-table th, .admin-table td{ padding:8px 10px; border-bottom:1px solid var(--line); text-align:left; white-space:nowrap; }
+.admin-table th{ font-weight:700; color:var(--ink-soft, var(--ink)); }
+.admin-table td.status-paid{ color:#20452f; font-weight:600; }
+.admin-table td.status-pending{ color:#8a6d1a; font-weight:600; }
+.admin-table td.status-failed, .admin-table td.status-expired{ color:#7a2a28; font-weight:600; }

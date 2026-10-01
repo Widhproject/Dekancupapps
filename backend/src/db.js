@@ -35,6 +35,14 @@ function defaultData() {
     push_subscriptions: [],
     // Pendaftaran peserta per cabang olahraga (form publik "/daftar/:cabor").
     registrations: [],
+    // Tiket masuk penonton (form publik "/tiket") — pembayaran lewat Midtrans
+    // Snap, tiap tiket dapat QR unik yang di-scan panitia di pintu masuk
+    // (lihat routes/tickets.js untuk alur lengkapnya).
+    tickets: [],
+    // Pengaturan tiket yang bisa diubah admin tanpa perlu deploy ulang kode
+    // (harga, nama event, venue) — lihat migrateTicketConfig() di bawah utk
+    // instalasi lama yang belum punya field ini.
+    ticket_config: null,
     // Penanda "data contoh (demo) sudah pernah dibuat". Dipakai supaya
     // seed() di bawah cuma mengisi data contoh SEKALI SAJA (pas pertama
     // kali aplikasi dijalankan) — kalau admin menghapus semua HIMA/
@@ -103,6 +111,26 @@ export const db = load();
   }
   if (db.event_config.scoreboard_bg_custom_url === undefined) {
     db.event_config.scoreboard_bg_custom_url = null;
+    changed = true;
+  }
+  if (changed) save();
+})();
+
+// Migrasi: instalasi lama (sebelum fitur tiket ada) belum punya field ini
+// sama sekali — tanpa migrasi ini, endpoint tiket akan crash karena
+// db.ticket_config null / db.tickets undefined.
+(function migrateTicketConfig() {
+  let changed = false;
+  if (!db.ticket_config) {
+    db.ticket_config = {
+      event_label: 'Final Basket — Dekan Cup FST 2026',
+      venue: '',
+      price: 15000,
+    };
+    changed = true;
+  }
+  if (!Array.isArray(db.tickets)) {
+    db.tickets = [];
     changed = true;
   }
   if (changed) save();

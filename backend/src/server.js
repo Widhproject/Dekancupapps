@@ -16,6 +16,7 @@ import matchRoutes from './routes/matches.js';
 import adminRoutes from './routes/admin.js';
 import pushRoutes from './routes/push.js';
 import registrationRoutes from './routes/registrations.js';
+import ticketRoutes from './routes/tickets.js';
 import { notifyHimaFollowers } from './lib/push.js';
 
 const app = express();
@@ -30,6 +31,7 @@ app.use('/api/matches', matchRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/push', pushRoutes);
 app.use('/api/registrations', registrationRoutes);
+app.use('/api/tickets', ticketRoutes);
 
 // Menyajikan file formulir pendaftaran (PDF) yang diunggah peserta, supaya admin
 // bisa membuka/mengunduhnya langsung dari panel admin.

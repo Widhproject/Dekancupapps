@@ -47,6 +47,45 @@ async function api(path, { method = 'GET', body, auth = false } = {}) {
   return data;
 }
 
+// ---------- Midtrans Snap (popup pembayaran tiket) ----------
+// Skrip Snap.js beda domain untuk sandbox vs production (Midtrans TIDAK
+// menyediakan satu skrip "universal" yang otomatis pilih sendiri), jadi
+// dimuat secara dinamis di sini berdasarkan jawaban dari GET /tickets/config
+// — bukan ditaruh langsung di index.html seperti Socket.io, karena
+// index.html tidak tahu sandbox/production sampai backend menjawab.
+// Dicache di variabel module-level supaya skrip cuma dimuat sekali walau
+// halaman "/tiket" dibuka berkali-kali dalam satu sesi.
+let snapLoadPromise = null;
+function loadMidtransSnap(clientKey, isProduction) {
+  if (window.snap) return Promise.resolve(window.snap);
+  if (snapLoadPromise) return snapLoadPromise;
+  snapLoadPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = isProduction ? 'https://app.midtrans.com/snap/snap.js' : 'https://app.sandbox.midtrans.com/snap/snap.js';
+    script.setAttribute('data-client-key', clientKey);
+    script.onload = () => resolve(window.snap);
+    script.onerror = () => reject(new Error('Gagal memuat skrip pembayaran. Cek koneksi internet Anda.'));
+    document.head.appendChild(script);
+  });
+  return snapLoadPromise;
+}
+
+// jsQR dimuat lazy (bukan di index.html) karena hanya dipakai admin di
+// fitur scan tiket — tidak perlu dibebankan ke semua pengunjung publik.
+let jsQRLoadPromise = null;
+function loadJsQR() {
+  if (window.jsQR) return Promise.resolve(window.jsQR);
+  if (jsQRLoadPromise) return jsQRLoadPromise;
+  jsQRLoadPromise = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'js/vendor/jsQR.js';
+    script.onload = () => resolve(window.jsQR);
+    script.onerror = () => reject(new Error('Gagal memuat modul pemindai QR.'));
+    document.head.appendChild(script);
+  });
+  return jsQRLoadPromise;
+}
+
 // ---------- Koreksi selisih jam perangkat vs jam server ----------
 // Timer basket dihitung mundur dengan membandingkan waktu target ("selesai
 // pada jam X") dengan jam SAAT INI di perangkat pemakai. Kalau jam
@@ -447,6 +486,9 @@ async function router() {
   }
   if (!handler && segments[0] === 'daftar' && segments[1]) {
     handler = routes['/daftar/:sport']; params = { sport: segments[1] };
+  }
+  if (!handler && segments[0] === 'tiket' && segments[1]) {
+    handler = routes['/tiket/:code']; params = { code: segments[1] };
   }
 
   renderAdminNav();
@@ -2107,6 +2149,116 @@ route('/riwayat', async ({ query }) => {
 });
 
 // ============================================================
+// HALAMAN: TIKET MASUK PENONTON (final di venue luar, dsb)
+// ============================================================
+route('/tiket', async () => {
+  const cfg = await api('/tickets/config');
+
+  if (!cfg.configured) {
+    app.innerHTML = `
+      <div class="wrap">
+        <div class="section-head"><div><div class="eyebrow">Tiket Masuk</div><h2>Beli Tiket Nonton</h2></div></div>
+        ${emptyState('Penjualan tiket belum dibuka / belum dikonfigurasi panitia. Silakan cek kembali nanti.')}
+      </div>`;
+    return;
+  }
+
+  app.innerHTML = `
+    <div class="wrap" style="max-width:560px;">
+      <div class="section-head"><div><div class="eyebrow">Tiket Masuk</div><h2>${cfg.event_label}</h2></div></div>
+      <p class="mc-meta" style="margin-bottom:4px;">${cfg.venue ? `📍 ${cfg.venue}` : ''}</p>
+      <p class="mc-meta" style="margin-bottom:18px;">
+        Harga tiket <strong>Rp${Number(cfg.price).toLocaleString('id-ID')}</strong> / orang (khusus penonton di luar civitas FST).
+        Setelah pembayaran berhasil, tiket berupa kode QR akan langsung tampil di halaman ini —
+        <strong>screenshot halaman tersebut</strong> dan tunjukkan ke panitia saat masuk venue.
+      </p>
+      <form id="ticket-form" class="form-grid-2" style="gap:10px;">
+        <div class="filter-group" style="grid-column:1/-1;"><label>Nama Lengkap</label><input id="tf-name" required placeholder="Nama sesuai identitas" /></div>
+        <div class="filter-group" style="grid-column:1/-1;"><label>Nomor WhatsApp</label><input id="tf-phone" required placeholder="08xxxxxxxxxx" /></div>
+        <button class="btn primary" type="submit" id="tf-submit" style="grid-column:1/-1;">Bayar Sekarang — Rp${Number(cfg.price).toLocaleString('id-ID')}</button>
+      </form>
+      <div id="ticket-status-box" style="margin-top:16px;"></div>
+    </div>`;
+
+  const statusBox = document.getElementById('ticket-status-box');
+  let pollTimer = null;
+
+  // Polling status ke backend sampai webhook Midtrans selesai diproses di
+  // server (lihat catatan di routes/tickets.js) — TIDAK langsung percaya
+  // status dari callback Snap di browser semata, karena itu bisa lebih
+  // dulu selesai daripada webhook-nya sendiri sampai ke server.
+  function pollStatus(orderId, attemptsLeft) {
+    clearTimeout(pollTimer);
+    if (attemptsLeft <= 0) {
+      statusBox.innerHTML = `<div class="empty-state">Pembayaran sedang diproses lebih lama dari biasanya. Simpan Order ID <strong>${orderId}</strong> ini dan hubungi panitia kalau tiket belum juga muncul dalam beberapa menit.</div>`;
+      return;
+    }
+    api(`/tickets/status/${orderId}`).then((res) => {
+      if (res.status === 'paid') {
+        location.hash = `/tiket/${res.ticket_code}`;
+      } else if (res.status === 'failed' || res.status === 'expired') {
+        statusBox.innerHTML = `<div class="empty-state">Pembayaran tidak berhasil (${res.status}). Silakan coba beli tiket lagi.</div>`;
+      } else {
+        statusBox.innerHTML = `<div class="mc-meta">⏳ Menunggu konfirmasi pembayaran...</div>`;
+        pollTimer = setTimeout(() => pollStatus(orderId, attemptsLeft - 1), 2500);
+      }
+    }).catch(() => {
+      pollTimer = setTimeout(() => pollStatus(orderId, attemptsLeft - 1), 2500);
+    });
+  }
+
+  document.getElementById('ticket-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const submitBtn = document.getElementById('tf-submit');
+    const buyer_name = document.getElementById('tf-name').value.trim();
+    const buyer_phone = document.getElementById('tf-phone').value.trim();
+    if (!buyer_name || !buyer_phone) return toast('Nama dan nomor WhatsApp wajib diisi');
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Memproses...';
+    try {
+      const { token, order_id } = await api('/tickets/checkout', { method: 'POST', body: { buyer_name, buyer_phone } });
+      const snap = await loadMidtransSnap(cfg.client_key, cfg.is_production);
+      snap.pay(token, {
+        onSuccess: () => { statusBox.innerHTML = `<div class="mc-meta">✅ Pembayaran diterima, menyiapkan tiket...</div>`; pollStatus(order_id, 40); },
+        onPending: () => { statusBox.innerHTML = `<div class="mc-meta">⏳ Menunggu pembayaran Anda selesai (mis. transfer/QRIS)...</div>`; pollStatus(order_id, 60); },
+        onError: () => { toast('Pembayaran gagal. Silakan coba lagi.'); },
+        onClose: () => { statusBox.innerHTML = `<div class="mc-meta">Kalau Anda sudah terlanjur bayar sebelum menutup jendela ini, tunggu sebentar — status akan diperbarui otomatis. Order ID: ${order_id}</div>`; pollStatus(order_id, 40); },
+      });
+    } catch (err) {
+      toast(err.message);
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = `Bayar Sekarang — Rp${Number(cfg.price).toLocaleString('id-ID')}`;
+    }
+  });
+});
+
+// Halaman tiket (QR) yang di-screenshot penonton & ditunjukkan ke panitia.
+route('/tiket/:code', async ({ params }) => {
+  let ticket;
+  try {
+    ticket = await api(`/tickets/${params.code}`);
+  } catch (err) {
+    app.innerHTML = `<div class="wrap">${emptyState(err.message || 'Tiket tidak ditemukan.')}</div>`;
+    return;
+  }
+
+  app.innerHTML = `
+    <div class="wrap" style="max-width:420px;">
+      <div class="ticket-card">
+        ${ticket.used ? `<div class="ticket-used-banner">⚠️ Tiket ini sudah pernah dipakai masuk pada ${ticket.used_at}</div>` : ''}
+        <div class="eyebrow" style="text-align:center;">${ticket.event_label}</div>
+        ${ticket.venue ? `<p class="mc-meta" style="text-align:center;">📍 ${ticket.venue}</p>` : ''}
+        <img src="${ticket.qr_data_url}" alt="QR Tiket" class="ticket-qr" />
+        <div class="ticket-code">${ticket.ticket_code}</div>
+        <div class="ticket-buyer">${ticket.buyer_name}</div>
+        <p class="mc-meta" style="text-align:center; margin-top:10px;">Screenshot halaman ini dan tunjukkan ke panitia di pintu masuk. Kode tiket di atas juga bisa diketik manual kalau QR susah discan.</p>
+      </div>
+    </div>`;
+});
+
+// ============================================================
 // HALAMAN: REGISTRASI PESERTA
 // ============================================================
 route('/daftar', async () => {
@@ -2513,6 +2665,156 @@ function athleteRosterHTML(rosterBySport) {
     </div>`;
 }
 
+// Kamera scanner disimpan di closure module-level (bukan di dalam
+// bindTicketPanel) supaya bisa dihentikan dengan benar dari HANDLER TOGGLE
+// section lain kalau admin pindah ke tab/section lain sambil kamera masih
+// menyala — mencegah kamera tetap aktif di background tanpa disadari.
+let activeScanStream = null;
+let activeScanRAF = null;
+
+function stopTicketScanner() {
+  if (activeScanRAF) cancelAnimationFrame(activeScanRAF);
+  activeScanRAF = null;
+  if (activeScanStream) activeScanStream.getTracks().forEach((track) => track.stop());
+  activeScanStream = null;
+}
+
+async function startTicketScanner(onDetected) {
+  stopTicketScanner();
+  const video = document.getElementById('scan-video');
+  if (!video) return;
+  try {
+    await loadJsQR();
+    activeScanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    video.srcObject = activeScanStream;
+    await video.play();
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    let lastCode = null;
+    let lastCodeAt = 0;
+
+    const tick = () => {
+      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = window.jsQR(imageData.data, imageData.width, imageData.height);
+        // Debounce 2 detik per kode yang sama, supaya satu tiket yang masih
+        // kelihatan di depan kamera tidak ke-submit berkali-kali beruntun
+        // selagi petugas belum sempat menjauhkan tiketnya.
+        if (code && (code.data !== lastCode || Date.now() - lastCodeAt > 2000)) {
+          lastCode = code.data;
+          lastCodeAt = Date.now();
+          onDetected(code.data);
+        }
+      }
+      activeScanRAF = requestAnimationFrame(tick);
+    };
+    activeScanRAF = requestAnimationFrame(tick);
+  } catch (err) {
+    const resultBox = document.getElementById('scan-result-box');
+    if (resultBox) resultBox.innerHTML = `<div class="scan-result bad">Tidak bisa mengakses kamera: ${err.message}. Gunakan input kode manual di bawah.</div>`;
+  }
+}
+
+async function submitTicketScan(code) {
+  const resultBox = document.getElementById('scan-result-box');
+  if (!code?.trim()) return;
+  try {
+    const res = await api('/tickets/scan', { method: 'POST', auth: true, body: { ticket_code: code.trim() } });
+    resultBox.innerHTML = `<div class="scan-result ok">✅ ${res.message}<br>${res.buyer_name}</div>`;
+  } catch (err) {
+    resultBox.innerHTML = `<div class="scan-result bad">❌ ${err.message}</div>`;
+  }
+}
+
+function bindTicketPanel() {
+  // --- Pengaturan tiket (nama event, venue, harga) ---
+  const configForm = document.getElementById('ticket-config-form');
+  if (configForm) {
+    configForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try {
+        await api('/tickets/config', {
+          method: 'PUT', auth: true,
+          body: {
+            event_label: document.getElementById('tc-label').value.trim(),
+            venue: document.getElementById('tc-venue').value.trim(),
+            price: Number(document.getElementById('tc-price').value),
+          },
+        });
+        toast('Pengaturan tiket disimpan');
+      } catch (err) { toast(err.message); }
+    });
+  }
+
+  // --- Unduh Excel (pakai fetch+blob manual, BUKAN <a href> langsung ke
+  // endpoint-nya — endpoint ini butuh header Authorization Bearer token
+  // yang tidak bisa dikirim lewat navigasi link biasa). ---
+  const exportBtn = document.getElementById('ticket-export-btn');
+  if (exportBtn) {
+    exportBtn.addEventListener('click', async () => {
+      exportBtn.disabled = true;
+      exportBtn.textContent = 'Menyiapkan…';
+      try {
+        const res = await fetch(`${API_BASE}/tickets/export/xlsx`, { headers: { Authorization: `Bearer ${getToken()}` } });
+        if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.message || 'Gagal membuat file Excel'); }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `dekancup-tiket-${new Date().toISOString().slice(0, 10)}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } catch (err) { toast(err.message); }
+      exportBtn.disabled = false;
+      exportBtn.textContent = '⬇️ Unduh Excel';
+    });
+  }
+
+  // --- Pencarian tabel tiket (filter sisi-klien, data sudah lengkap di-fetch sekali di awal) ---
+  const searchInput = document.getElementById('ticket-search-input');
+  if (searchInput) {
+    searchInput.addEventListener('input', async () => {
+      const q = searchInput.value.trim();
+      try {
+        const rows = await api(`/tickets${q ? `?q=${encodeURIComponent(q)}` : ''}`, { auth: true });
+        document.querySelector('#ticket-table tbody').innerHTML = ticketRowsHTML(rows);
+      } catch { /* abaikan error pencarian sepintas */ }
+    });
+  }
+
+  // --- Scan manual (ketik kode) ---
+  const manualBtn = document.getElementById('scan-manual-btn');
+  const manualInput = document.getElementById('scan-manual-input');
+  if (manualBtn && manualInput) {
+    const doManualScan = () => { submitTicketScan(manualInput.value); manualInput.value = ''; };
+    manualBtn.addEventListener('click', doManualScan);
+    manualInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); doManualScan(); } });
+  }
+
+  // --- Kamera: nyala kalau section-nya memang sedang terbuka saat halaman
+  // dirender, lalu nyala/mati mengikuti toggle buka-tutup section itu
+  // (lihat listener 'toggle' umum di route('/admin', ...) — di sana kita
+  // tambahkan pengecualian khusus buat section ini, lihat kode di bawahnya).
+  const scanSection = document.querySelector('[data-section-key="ticket-scan"]');
+  if (scanSection) {
+    if (scanSection.open) startTicketScanner((code) => submitTicketScan(code));
+    scanSection.addEventListener('toggle', () => {
+      if (scanSection.open) startTicketScanner((code) => submitTicketScan(code));
+      else stopTicketScanner();
+    });
+  }
+  // Matikan kamera begitu admin pindah ke halaman lain (bukan cuma saat
+  // section-nya ditutup) — supaya lampu indikator kamera tidak terus
+  // menyala tanpa disadari setelah meninggalkan Panel Admin.
+  window.addEventListener('hashchange', stopTicketScanner, { once: true });
+}
+
 async function bindAthleteProfilePanel(himas) {
   const select = document.getElementById('pa-select');
   const box = document.getElementById('pa-roster');
@@ -2574,6 +2876,20 @@ async function bindAthleteProfilePanel(himas) {
 // (Data Registrasi Peserta, Semua Pertandingan) sengaja tertutup duluan
 // supaya halaman admin tidak langsung penuh scroll begitu pendaftar sudah
 // banyak.
+function ticketRowsHTML(tickets) {
+  if (!tickets.length) return `<tr><td colspan="6" class="mc-meta">Belum ada tiket terjual.</td></tr>`;
+  return tickets.map((t) => `
+    <tr>
+      <td>${t.created_at}</td>
+      <td>${t.buyer_name}</td>
+      <td>${t.buyer_phone}</td>
+      <td>${t.ticket_code}</td>
+      <td class="status-${t.status}">${t.status}</td>
+      <td>${t.used ? `✅ ${t.used_at}` : '—'}</td>
+    </tr>
+  `).join('');
+}
+
 const ADMIN_OPEN_SECTIONS = {
   'new-match': true,
   'hima-profile': false,
@@ -2582,15 +2898,20 @@ const ADMIN_OPEN_SECTIONS = {
   'athlete-profile': false,
   'all-matches': false,
   'scoreboard-bg': false,
+  'ticket-settings': false,
+  'ticket-scan': false,
+  'ticket-list': false,
 };
 
 route('/admin', async () => {
   if (!isAdmin()) { location.hash = '/login'; return; }
-  const [matches, himas, sportConfig, scoreboardConfig] = await Promise.all([
+  const [matches, himas, sportConfig, scoreboardConfig, ticketConfig, tickets] = await Promise.all([
     api('/matches'),
     api('/himas?team_only=true'),
     api('/registrations/config'),
     api('/himas/config/event'),
+    api('/tickets/config'),
+    api('/tickets', { auth: true }),
   ]);
   const himaOptions = himas.map((h) => `<option value="${h.id}">${h.code}</option>`).join('');
 
@@ -2654,6 +2975,65 @@ route('/admin', async () => {
           <input type="file" id="bg-upload-input" accept="image/*" style="display:none;" />
           <button class="btn small ghost" id="btn-upload-bg" type="button">📷 ${scoreboardConfig.scoreboard_bg_custom_url ? 'Ganti' : 'Unggah'} Gambar Sendiri</button>
           <p class="mc-meta" style="margin-top:6px;">Format gambar biasa (JPG/PNG/WebP), maksimal 8 MB. Disarankan foto yang tidak terlalu ramai di bagian tengah, karena logo & skor akan ditampilkan menimpa di atasnya.</p>
+        </div>
+      </details>
+
+      <details class="admin-score-box admin-section" data-section-key="ticket-settings" ${sectionOpen('ticket-settings')}>
+        <summary>
+          <div class="admin-section-title">Pengaturan Tiket Masuk<small>Nama event, venue, dan harga tiket — tampil di halaman "/tiket"</small></div>
+          <span class="chevron">${CHEVRON_ICON}</span>
+        </summary>
+        <div class="admin-section-body">
+          ${!ticketConfig.configured ? `
+            <p class="mc-meta" style="margin-bottom:10px; color:#7a2a28;">
+              ⚠️ Payment gateway (Midtrans) belum dikonfigurasi — halaman "/tiket" akan menampilkan "belum dibuka" ke penonton.
+              Isi <code>MIDTRANS_SERVER_KEY</code> dan <code>MIDTRANS_CLIENT_KEY</code> di environment variable backend (lihat komentar di file .env.example) lalu deploy ulang.
+            </p>
+          ` : `<p class="mc-meta" style="margin-bottom:10px;">Payment gateway aktif (${ticketConfig.is_production ? 'mode PRODUCTION — uang asli' : 'mode SANDBOX — belum uang asli, buat testing'}).</p>`}
+          <form id="ticket-config-form" class="form-grid-2" style="gap:10px;">
+            <div class="filter-group" style="grid-column:1/-1;"><label>Nama Event</label><input id="tc-label" value="${ticketConfig.event_label}" placeholder="Final Basket — Dekan Cup FST 2026" /></div>
+            <div class="filter-group" style="grid-column:1/-1;"><label>Venue</label><input id="tc-venue" value="${ticketConfig.venue}" placeholder="GOR ..., alamat lengkap" /></div>
+            <div class="filter-group"><label>Harga Tiket (Rp)</label><input id="tc-price" type="number" min="0" step="500" value="${ticketConfig.price}" /></div>
+            <button class="btn primary" type="submit" style="grid-column:1/-1;">Simpan Pengaturan Tiket</button>
+          </form>
+        </div>
+      </details>
+
+      <details class="admin-score-box admin-section" data-section-key="ticket-scan" ${sectionOpen('ticket-scan')}>
+        <summary>
+          <div class="admin-section-title">Scan Tiket Masuk<small>Buat petugas di pintu masuk — pindai QR atau ketik kode manual</small></div>
+          <span class="chevron">${CHEVRON_ICON}</span>
+        </summary>
+        <div class="admin-section-body">
+          <div class="scan-video-wrap" id="scan-video-wrap">
+            <video id="scan-video" playsinline muted></video>
+            <div class="scan-video-frame"></div>
+          </div>
+          <p class="mc-meta" style="text-align:center; margin-top:8px;">Arahkan kamera ke QR tiket penonton. Butuh izin akses kamera browser.</p>
+          <div class="scan-manual-row">
+            <input id="scan-manual-input" placeholder="Atau ketik kode tiket manual (mis. ABCD1234)" maxlength="8" />
+            <button class="btn small" id="scan-manual-btn" type="button">Cek</button>
+          </div>
+          <div id="scan-result-box"></div>
+        </div>
+      </details>
+
+      <details class="admin-score-box admin-section" data-section-key="ticket-list" ${sectionOpen('ticket-list')}>
+        <summary>
+          <div class="admin-section-title">Data Tiket Terjual<small>${tickets.length} tiket · ${tickets.filter((t) => t.status === 'paid').length} lunas · ${tickets.filter((t) => t.used).length} sudah masuk</small></div>
+          <span class="chevron">${CHEVRON_ICON}</span>
+        </summary>
+        <div class="admin-section-body">
+          <div style="display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+            <input id="ticket-search-input" placeholder="Cari nama / no. WA / kode tiket..." style="flex:1; min-width:200px;" />
+            <button class="btn small ghost" type="button" id="ticket-export-btn">⬇️ Unduh Excel</button>
+          </div>
+          <div style="overflow-x:auto;">
+            <table class="admin-table" id="ticket-table">
+              <thead><tr><th>Waktu</th><th>Nama</th><th>WA</th><th>Kode</th><th>Status</th><th>Masuk?</th></tr></thead>
+              <tbody>${ticketRowsHTML(tickets)}</tbody>
+            </table>
+          </div>
         </div>
       </details>
 
@@ -2802,6 +3182,7 @@ route('/admin', async () => {
   bindDeleteMatchButtons();
   bindRegistrationPanel();
   bindAthleteProfilePanel(himas);
+  bindTicketPanel();
 
   document.querySelectorAll('[data-sl-save]').forEach((btn) => {
     btn.addEventListener('click', async () => {
