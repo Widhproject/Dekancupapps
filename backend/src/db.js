@@ -125,8 +125,19 @@ export const db = load();
     db.ticket_config = {
       event_label: 'Final Basket — Dekan Cup FST 2026',
       venue: '',
-      price: 15000,
+      // package_prices: harga per paket, key-nya jumlah orang (1/3/5),
+      // masing-masing bisa diatur bebas oleh admin — TIDAK otomatis
+      // dihitung dari diskon tertentu, supaya admin punya kendali penuh.
+      package_prices: { 1: 15000, 3: 40000, 5: 60000 },
     };
+    changed = true;
+  }
+  // Instalasi yang sempat jalan sebelum paket bundling ditambahkan (cuma
+  // punya field "price" tunggal) — migrasikan ke package_prices, dengan
+  // paket 3 & 5 orang default tanpa diskon (admin bisa ubah sendiri nanti).
+  if (!db.ticket_config.package_prices) {
+    const base = db.ticket_config.price || 15000;
+    db.ticket_config.package_prices = { 1: base, 3: base * 3, 5: base * 5 };
     changed = true;
   }
   if (!Array.isArray(db.tickets)) {

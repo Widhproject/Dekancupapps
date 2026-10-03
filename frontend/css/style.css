@@ -1470,31 +1470,93 @@ label .sport-icon-svg{ margin-right:.3em; }
 }
 
 /* ============================================================
-   TIKET MASUK PENONTON — kartu tiket QR ("/tiket/:kode") yang di-
-   screenshot penonton, dan tampilan scanner kamera di Panel Admin.
+   TIKET MASUK PENONTON — kartu tiket QR ("/tiket/:kode" dan
+   "/tiket/pesanan/:order_id") yang di-screenshot/diunduh penonton, dan
+   tampilan scanner kamera di Panel Admin.
+   Desainnya sengaja meniru bentuk tiket sungguhan: pita judul di atas,
+   lalu "sobekan" bergerigi (garis putus-putus + lingkaran takik di kedua
+   sisi) memisahkan bagian QR dari bagian info — bukan cuma kotak polos.
 ============================================================ */
 .ticket-card{
   background:var(--paper-light);
-  border:2px solid var(--gold, var(--line));
-  border-radius:var(--radius-md, 14px);
-  padding:28px 22px;
+  border-radius:18px;
+  overflow:visible;
   text-align:center;
-  box-shadow:0 12px 32px rgba(0,0,0,0.12);
+  box-shadow:0 18px 44px rgba(59,46,34,0.22);
+  margin-bottom:22px;
+  position:relative;
 }
+.ticket-card-head{
+  background:linear-gradient(135deg, var(--maroon), var(--maroon-dark));
+  color:var(--paper-light);
+  border-radius:18px 18px 0 0;
+  padding:18px 20px 16px;
+  position:relative;
+}
+.ticket-card-head .eyebrow{ color:var(--gold-light); opacity:.95; }
+.ticket-card-head h3{
+  font-family:'Playfair Display', serif; font-weight:800;
+  font-size:1.3rem; margin:4px 0 0; line-height:1.25;
+}
+.ticket-card-head .ticket-venue{ font-size:.82rem; margin-top:6px; opacity:.9; }
+.ticket-card-body{ padding:22px 22px 10px; }
 .ticket-qr{
-  width:100%; max-width:260px; aspect-ratio:1/1;
-  margin:16px auto; display:block;
-  border:1px solid var(--line); border-radius:8px; padding:8px; background:#fff;
+  width:100%; max-width:240px; aspect-ratio:1/1;
+  margin:4px auto 14px; display:block;
+  border:2px solid var(--gold); border-radius:10px; padding:10px; background:#fff;
 }
 .ticket-code{
   font-family:'Playfair Display', serif; font-weight:800;
-  font-size:1.6rem; letter-spacing:.12em;
-  margin-top:6px;
+  font-size:1.5rem; letter-spacing:.14em;
+  margin-top:4px;
 }
-.ticket-buyer{ font-size:1.05rem; margin-top:2px; color:var(--ink-soft, var(--ink)); }
+.ticket-buyer{ font-size:1rem; margin-top:2px; color:var(--ink); opacity:.85; }
+.ticket-seq{
+  display:inline-block; margin-top:8px; padding:3px 10px;
+  background:var(--paper-dark); border-radius:999px; font-size:.75rem; font-weight:700;
+  letter-spacing:.04em;
+}
+
+/* "Sobekan" tiket: garis putus-putus + dua lingkaran takik yang warnanya
+   SAMA dengan latar belakang halaman (var(--paper)) supaya terlihat
+   seperti lubang beneran, bukan cuma garis biasa. */
+.ticket-perforation{
+  position:relative;
+  border-top:2px dashed var(--line-strong);
+  margin:4px 22px 0;
+}
+.ticket-perforation::before, .ticket-perforation::after{
+  content:''; position:absolute; top:-11px; width:22px; height:22px;
+  background:var(--paper); border-radius:50%;
+}
+.ticket-perforation::before{ left:-33px; }
+.ticket-perforation::after{ right:-33px; }
+
+.ticket-card-foot{ padding:16px 22px 22px; }
+.ticket-foot-note{ font-size:.8rem; color:var(--ink); opacity:.7; margin-bottom:14px; }
+.ticket-download-btn{
+  display:inline-flex; align-items:center; gap:8px;
+  width:100%; justify-content:center;
+}
 .ticket-used-banner{
-  background:#7a2a28; color:#fff; padding:10px 14px; border-radius:8px;
-  font-size:.85rem; font-weight:600; margin-bottom:16px;
+  background:var(--maroon-dark); color:var(--paper-light); padding:10px 14px;
+  border-radius:0; font-size:.85rem; font-weight:600; text-align:center;
+}
+
+/* Kartu pemilihan paket (1/3/5 orang) di form beli tiket */
+.ticket-pkg-grid{ display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; margin:16px 0; }
+.ticket-pkg-card{
+  border:2px solid var(--line); border-radius:12px; padding:14px 8px;
+  text-align:center; cursor:pointer; background:var(--paper-light);
+  transition:border-color .15s, transform .1s;
+}
+.ticket-pkg-card:hover{ border-color:var(--gold-light); }
+.ticket-pkg-card.active{ border-color:var(--maroon); background:var(--paper-dark); }
+.ticket-pkg-card .pkg-qty{ font-family:'Playfair Display', serif; font-weight:800; font-size:1.6rem; }
+.ticket-pkg-card .pkg-label{ font-size:.72rem; text-transform:uppercase; letter-spacing:.06em; opacity:.75; margin:2px 0 6px; }
+.ticket-pkg-card .pkg-price{ font-size:.92rem; font-weight:700; color:var(--maroon); }
+@media (max-width:480px){
+  .ticket-pkg-grid{ grid-template-columns:1fr; }
 }
 
 /* Scanner tiket admin — area video kamera + hasil scan */

@@ -86,6 +86,169 @@ function loadJsQR() {
   return jsQRLoadPromise;
 }
 
+// ---------- Unduh tiket sebagai gambar PNG ----------
+// Digambar manual pakai Canvas API (bukan html2canvas atau library serupa)
+// supaya tidak nambah dependency eksternal dan hasilnya konsisten persis
+// di semua browser — tidak kena isu font-rendering/CORS yang sering muncul
+// kalau "menangkap screenshot" elemen DOM pakai library pihak ketiga.
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+
+function roundRectPath(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+async function renderTicketCanvas(t) {
+  const W = 640, H = 780;
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  const COLOR = { paper: '#EDE4D0', paperLight: '#F6EFDF', maroon: '#7A2A28', maroonDark: '#5C1F1D', ink: '#3B2E22', gold: '#B8860B', goldLight: '#D4AF37' };
+
+  // Latar belakang halaman
+  ctx.fillStyle = COLOR.paper;
+  ctx.fillRect(0, 0, W, H);
+
+  // Badan kartu tiket (rounded rect, shadow)
+  const cardX = 40, cardY = 40, cardW = W - 80, cardH = H - 80;
+  ctx.save();
+  ctx.shadowColor = 'rgba(59,46,34,0.35)';
+  ctx.shadowBlur = 40;
+  ctx.shadowOffsetY = 18;
+  ctx.fillStyle = COLOR.paperLight;
+  roundRectPath(ctx, cardX, cardY, cardW, cardH, 22);
+  ctx.fill();
+  ctx.restore();
+
+  // Pita header maroon
+  const headH = 150;
+  ctx.save();
+  roundRectPath(ctx, cardX, cardY, cardW, headH, 22);
+  ctx.clip();
+  const grad = ctx.createLinearGradient(cardX, cardY, cardX + cardW, cardY + headH);
+  grad.addColorStop(0, COLOR.maroon);
+  grad.addColorStop(1, COLOR.maroonDark);
+  ctx.fillStyle = grad;
+  ctx.fillRect(cardX, cardY, cardW, headH);
+  ctx.restore();
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = COLOR.goldLight;
+  ctx.font = '700 15px Georgia, serif';
+  ctx.fillText('TIKET MASUK', W / 2, cardY + 36);
+
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '800 28px "Playfair Display", Georgia, serif';
+  wrapText(ctx, t.event_label || 'Dekan Cup FST 2026', W / 2, cardY + 72, cardW - 60, 32);
+
+  if (t.venue) {
+    ctx.fillStyle = 'rgba(255,255,255,0.88)';
+    ctx.font = '400 14px Georgia, serif';
+    ctx.fillText(`📍 ${t.venue}`, W / 2, cardY + headH - 16);
+  }
+
+  // QR code
+  const qrImg = await loadImage(t.qr_data_url);
+  const qrSize = 260, qrX = W / 2 - qrSize / 2, qrY = cardY + headH + 34;
+  ctx.fillStyle = '#ffffff';
+  ctx.strokeStyle = COLOR.gold;
+  ctx.lineWidth = 3;
+  roundRectPath(ctx, qrX - 10, qrY - 10, qrSize + 20, qrSize + 20, 10);
+  ctx.fill();
+  ctx.stroke();
+  ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize);
+
+  // Kode tiket
+  ctx.fillStyle = COLOR.ink;
+  ctx.font = '800 30px "Playfair Display", Georgia, serif';
+  ctx.fillText(t.ticket_code, W / 2, qrY + qrSize + 50);
+
+  // Nama pembeli
+  ctx.font = '400 18px Georgia, serif';
+  ctx.globalAlpha = 0.85;
+  ctx.fillText(t.buyer_name, W / 2, qrY + qrSize + 78);
+  ctx.globalAlpha = 1;
+
+  if (t.seq && t.qty) {
+    ctx.font = '700 13px Georgia, serif';
+    ctx.fillStyle = COLOR.maroon;
+    ctx.fillText(`TIKET ${t.seq} DARI ${t.qty}`, W / 2, qrY + qrSize + 104);
+  }
+
+  // Garis perforasi + takik lingkaran di kedua sisi
+  const perfY = qrY + qrSize + 128;
+  ctx.setLineDash([8, 7]);
+  ctx.strokeStyle = 'rgba(59,46,34,0.5)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(cardX + 24, perfY);
+  ctx.lineTo(cardX + cardW - 24, perfY);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = COLOR.paper;
+  ctx.beginPath(); ctx.arc(cardX, perfY, 16, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cardX + cardW, perfY, 16, 0, Math.PI * 2); ctx.fill();
+
+  // Footer
+  ctx.fillStyle = COLOR.ink;
+  ctx.globalAlpha = 0.7;
+  ctx.font = '400 13px Georgia, serif';
+  wrapText(ctx, 'Tunjukkan tiket ini (atau kode di atas) ke panitia saat masuk venue.', W / 2, perfY + 34, cardW - 80, 18);
+  ctx.globalAlpha = 1;
+  ctx.font = '700 13px Georgia, serif';
+  ctx.fillStyle = COLOR.maroon;
+  ctx.fillText('✦ DEKAN CUP FST 2026 ✦', W / 2, cardY + cardH - 26);
+
+  return canvas;
+}
+
+function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+  const words = text.split(' ');
+  let line = '', lines = [];
+  for (const word of words) {
+    const test = line ? `${line} ${word}` : word;
+    if (ctx.measureText(test).width > maxWidth && line) { lines.push(line); line = word; }
+    else line = test;
+  }
+  if (line) lines.push(line);
+  const startY = y - ((lines.length - 1) * lineHeight) / 2;
+  lines.forEach((l, i) => ctx.fillText(l, x, startY + i * lineHeight));
+}
+
+async function downloadTicketImage(t, btn) {
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Menyiapkan gambar...';
+  try {
+    const canvas = await renderTicketCanvas(t);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `tiket-dekancup-${t.ticket_code}.png`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    toast('Gagal membuat gambar tiket: ' + err.message);
+  }
+  btn.disabled = false;
+  btn.textContent = originalText;
+}
+
 // ---------- Koreksi selisih jam perangkat vs jam server ----------
 // Timer basket dihitung mundur dengan membandingkan waktu target ("selesai
 // pada jam X") dengan jam SAAT INI di perangkat pemakai. Kalau jam
@@ -487,7 +650,9 @@ async function router() {
   if (!handler && segments[0] === 'daftar' && segments[1]) {
     handler = routes['/daftar/:sport']; params = { sport: segments[1] };
   }
-  if (!handler && segments[0] === 'tiket' && segments[1]) {
+  if (!handler && segments[0] === 'tiket' && segments[1] === 'pesanan' && segments[2]) {
+    handler = routes['/tiket/pesanan/:order_id']; params = { order_id: segments[2] };
+  } else if (!handler && segments[0] === 'tiket' && segments[1]) {
     handler = routes['/tiket/:code']; params = { code: segments[1] };
   }
 
@@ -2151,6 +2316,43 @@ route('/riwayat', async ({ query }) => {
 // ============================================================
 // HALAMAN: TIKET MASUK PENONTON (final di venue luar, dsb)
 // ============================================================
+
+// Kartu tiket bersama (dipakai di halaman tiket tunggal & halaman pesanan
+// paket) — satu fungsi supaya desainnya konsisten di kedua tempat.
+function ticketCardHTML(t) {
+  return `
+    <div class="ticket-card">
+      ${t.used ? `<div class="ticket-used-banner">⚠️ Sudah dipakai masuk pada ${t.used_at}</div>` : ''}
+      <div class="ticket-card-head">
+        <div class="eyebrow">Tiket Masuk</div>
+        <h3>${t.event_label}</h3>
+        ${t.venue ? `<div class="ticket-venue">📍 ${t.venue}</div>` : ''}
+      </div>
+      <div class="ticket-card-body">
+        <img src="${t.qr_data_url}" alt="QR Tiket" class="ticket-qr" />
+        <div class="ticket-code">${t.ticket_code}</div>
+        <div class="ticket-buyer">${t.buyer_name}</div>
+        ${t.seq && t.qty > 1 ? `<div class="ticket-seq">Tiket ${t.seq} dari ${t.qty}</div>` : ''}
+      </div>
+      <div class="ticket-perforation"></div>
+      <div class="ticket-card-foot">
+        <p class="ticket-foot-note">Screenshot atau unduh tiket ini, lalu tunjukkan ke panitia di pintu masuk untuk dipindai. Kode di atas juga bisa diketik manual kalau QR susah discan.</p>
+        <button class="btn primary ticket-download-btn" data-download-ticket="${t.ticket_code}">⬇️ Unduh Tiket (PNG)</button>
+      </div>
+    </div>`;
+}
+
+// Bind tombol unduh untuk sekumpulan kartu tiket yang baru dirender —
+// `ticketsByCode` adalah Map(ticket_code -> data lengkap termasuk qr_data_url).
+function bindTicketDownloadButtons(ticketsByCode) {
+  document.querySelectorAll('[data-download-ticket]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const t = ticketsByCode.get(btn.dataset.downloadTicket);
+      if (t) downloadTicketImage(t, btn);
+    });
+  });
+}
+
 route('/tiket', async () => {
   const cfg = await api('/tickets/config');
 
@@ -2163,22 +2365,51 @@ route('/tiket', async () => {
     return;
   }
 
+  const PACKAGES = [
+    { qty: 1, label: 'Sendiri' },
+    { qty: 3, label: 'Bertiga' },
+    { qty: 5, label: 'Berlima' },
+  ];
+  let selectedQty = 1;
+
   app.innerHTML = `
     <div class="wrap" style="max-width:560px;">
       <div class="section-head"><div><div class="eyebrow">Tiket Masuk</div><h2>${cfg.event_label}</h2></div></div>
       <p class="mc-meta" style="margin-bottom:4px;">${cfg.venue ? `📍 ${cfg.venue}` : ''}</p>
-      <p class="mc-meta" style="margin-bottom:18px;">
-        Harga tiket <strong>Rp${Number(cfg.price).toLocaleString('id-ID')}</strong> / orang (khusus penonton di luar civitas FST).
-        Setelah pembayaran berhasil, tiket berupa kode QR akan langsung tampil di halaman ini —
-        <strong>screenshot halaman tersebut</strong> dan tunjukkan ke panitia saat masuk venue.
+      <p class="mc-meta" style="margin-bottom:6px;">
+        Khusus penonton di luar civitas FST. Pilih paket sesuai jumlah rombongan — tiap orang tetap dapat tiket QR sendiri-sendiri untuk dipindai di pintu masuk.
+        Setelah pembayaran berhasil, semua tiket langsung tampil di halaman ini — <strong>screenshot atau unduh</strong> masing-masing.
       </p>
+
+      <div class="ticket-pkg-grid" id="ticket-pkg-grid">
+        ${PACKAGES.map((p) => `
+          <div class="ticket-pkg-card ${p.qty === selectedQty ? 'active' : ''}" data-qty="${p.qty}">
+            <div class="pkg-qty">${p.qty}</div>
+            <div class="pkg-label">${p.label}</div>
+            <div class="pkg-price">Rp${Number(cfg.package_prices[p.qty]).toLocaleString('id-ID')}</div>
+          </div>
+        `).join('')}
+      </div>
+
       <form id="ticket-form" class="form-grid-2" style="gap:10px;">
-        <div class="filter-group" style="grid-column:1/-1;"><label>Nama Lengkap</label><input id="tf-name" required placeholder="Nama sesuai identitas" /></div>
+        <div class="filter-group" style="grid-column:1/-1;"><label>Nama Lengkap (Pemesan)</label><input id="tf-name" required placeholder="Nama sesuai identitas" /></div>
         <div class="filter-group" style="grid-column:1/-1;"><label>Nomor WhatsApp</label><input id="tf-phone" required placeholder="08xxxxxxxxxx" /></div>
-        <button class="btn primary" type="submit" id="tf-submit" style="grid-column:1/-1;">Bayar Sekarang — Rp${Number(cfg.price).toLocaleString('id-ID')}</button>
+        <button class="btn primary" type="submit" id="tf-submit" style="grid-column:1/-1;">Bayar Sekarang — Rp${Number(cfg.package_prices[selectedQty]).toLocaleString('id-ID')}</button>
       </form>
       <div id="ticket-status-box" style="margin-top:16px;"></div>
     </div>`;
+
+  const submitBtn = document.getElementById('tf-submit');
+  const refreshSubmitLabel = () => {
+    if (!submitBtn.disabled) submitBtn.textContent = `Bayar Sekarang — Rp${Number(cfg.package_prices[selectedQty]).toLocaleString('id-ID')}`;
+  };
+  document.querySelectorAll('.ticket-pkg-card').forEach((card) => {
+    card.addEventListener('click', () => {
+      selectedQty = Number(card.dataset.qty);
+      document.querySelectorAll('.ticket-pkg-card').forEach((c) => c.classList.toggle('active', Number(c.dataset.qty) === selectedQty));
+      refreshSubmitLabel();
+    });
+  });
 
   const statusBox = document.getElementById('ticket-status-box');
   let pollTimer = null;
@@ -2195,7 +2426,7 @@ route('/tiket', async () => {
     }
     api(`/tickets/status/${orderId}`).then((res) => {
       if (res.status === 'paid') {
-        location.hash = `/tiket/${res.ticket_code}`;
+        location.hash = `/tiket/pesanan/${orderId}`;
       } else if (res.status === 'failed' || res.status === 'expired') {
         statusBox.innerHTML = `<div class="empty-state">Pembayaran tidak berhasil (${res.status}). Silakan coba beli tiket lagi.</div>`;
       } else {
@@ -2209,7 +2440,6 @@ route('/tiket', async () => {
 
   document.getElementById('ticket-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const submitBtn = document.getElementById('tf-submit');
     const buyer_name = document.getElementById('tf-name').value.trim();
     const buyer_phone = document.getElementById('tf-phone').value.trim();
     if (!buyer_name || !buyer_phone) return toast('Nama dan nomor WhatsApp wajib diisi');
@@ -2217,7 +2447,7 @@ route('/tiket', async () => {
     submitBtn.disabled = true;
     submitBtn.textContent = 'Memproses...';
     try {
-      const { token, order_id } = await api('/tickets/checkout', { method: 'POST', body: { buyer_name, buyer_phone } });
+      const { token, order_id } = await api('/tickets/checkout', { method: 'POST', body: { buyer_name, buyer_phone, quantity: selectedQty } });
       const snap = await loadMidtransSnap(cfg.client_key, cfg.is_production);
       snap.pay(token, {
         onSuccess: () => { statusBox.innerHTML = `<div class="mc-meta">✅ Pembayaran diterima, menyiapkan tiket...</div>`; pollStatus(order_id, 40); },
@@ -2229,12 +2459,13 @@ route('/tiket', async () => {
       toast(err.message);
     } finally {
       submitBtn.disabled = false;
-      submitBtn.textContent = `Bayar Sekarang — Rp${Number(cfg.price).toLocaleString('id-ID')}`;
+      refreshSubmitLabel();
     }
   });
 });
 
-// Halaman tiket (QR) yang di-screenshot penonton & ditunjukkan ke panitia.
+// Halaman tiket TUNGGAL (QR) — tetap dipertahankan buat kompatibilitas
+// (mis. kalau ada yang nyimpen link satu tiket spesifik dari paket >1 orang).
 route('/tiket/:code', async ({ params }) => {
   let ticket;
   try {
@@ -2244,18 +2475,34 @@ route('/tiket/:code', async ({ params }) => {
     return;
   }
 
+  app.innerHTML = `<div class="wrap" style="max-width:420px;">${ticketCardHTML(ticket)}</div>`;
+  bindTicketDownloadButtons(new Map([[ticket.ticket_code, ticket]]));
+});
+
+// Halaman PESANAN — tampil setelah bayar, menampilkan SEMUA tiket dalam
+// satu paket sekaligus (1, 3, atau 5 kartu tiket berurutan).
+route('/tiket/pesanan/:order_id', async ({ params }) => {
+  let order;
+  try {
+    order = await api(`/tickets/order/${params.order_id}`);
+  } catch (err) {
+    app.innerHTML = `<div class="wrap">${emptyState(err.message || 'Pesanan tidak ditemukan.')}</div>`;
+    return;
+  }
+
+  const ticketsByCode = new Map();
+  order.tickets.forEach((t) => ticketsByCode.set(t.ticket_code, {
+    ...t, event_label: order.event_label, venue: order.venue, qty: order.quantity,
+  }));
+
   app.innerHTML = `
     <div class="wrap" style="max-width:420px;">
-      <div class="ticket-card">
-        ${ticket.used ? `<div class="ticket-used-banner">⚠️ Tiket ini sudah pernah dipakai masuk pada ${ticket.used_at}</div>` : ''}
-        <div class="eyebrow" style="text-align:center;">${ticket.event_label}</div>
-        ${ticket.venue ? `<p class="mc-meta" style="text-align:center;">📍 ${ticket.venue}</p>` : ''}
-        <img src="${ticket.qr_data_url}" alt="QR Tiket" class="ticket-qr" />
-        <div class="ticket-code">${ticket.ticket_code}</div>
-        <div class="ticket-buyer">${ticket.buyer_name}</div>
-        <p class="mc-meta" style="text-align:center; margin-top:10px;">Screenshot halaman ini dan tunjukkan ke panitia di pintu masuk. Kode tiket di atas juga bisa diketik manual kalau QR susah discan.</p>
+      <div class="section-head" style="margin-bottom:16px;">
+        <div><div class="eyebrow">Pesanan Berhasil</div><h2>${order.quantity} Tiket Siap Dipakai</h2></div>
       </div>
+      ${order.tickets.map((t) => ticketCardHTML({ ...t, event_label: order.event_label, venue: order.venue, qty: order.quantity })).join('')}
     </div>`;
+  bindTicketDownloadButtons(ticketsByCode);
 });
 
 // ============================================================
@@ -2742,7 +2989,11 @@ function bindTicketPanel() {
           body: {
             event_label: document.getElementById('tc-label').value.trim(),
             venue: document.getElementById('tc-venue').value.trim(),
-            price: Number(document.getElementById('tc-price').value),
+            package_prices: {
+              1: Number(document.getElementById('tc-price-1').value),
+              3: Number(document.getElementById('tc-price-3').value),
+              5: Number(document.getElementById('tc-price-5').value),
+            },
           },
         });
         toast('Pengaturan tiket disimpan');
@@ -2993,7 +3244,9 @@ route('/admin', async () => {
           <form id="ticket-config-form" class="form-grid-2" style="gap:10px;">
             <div class="filter-group" style="grid-column:1/-1;"><label>Nama Event</label><input id="tc-label" value="${ticketConfig.event_label}" placeholder="Final Basket — Dekan Cup FST 2026" /></div>
             <div class="filter-group" style="grid-column:1/-1;"><label>Venue</label><input id="tc-venue" value="${ticketConfig.venue}" placeholder="GOR ..., alamat lengkap" /></div>
-            <div class="filter-group"><label>Harga Tiket (Rp)</label><input id="tc-price" type="number" min="0" step="500" value="${ticketConfig.price}" /></div>
+            <div class="filter-group"><label>Harga Paket 1 Orang (Rp)</label><input id="tc-price-1" type="number" min="0" step="500" value="${ticketConfig.package_prices[1]}" /></div>
+            <div class="filter-group"><label>Harga Paket 3 Orang (Rp)</label><input id="tc-price-3" type="number" min="0" step="500" value="${ticketConfig.package_prices[3]}" /></div>
+            <div class="filter-group"><label>Harga Paket 5 Orang (Rp)</label><input id="tc-price-5" type="number" min="0" step="500" value="${ticketConfig.package_prices[5]}" /></div>
             <button class="btn primary" type="submit" style="grid-column:1/-1;">Simpan Pengaturan Tiket</button>
           </form>
         </div>

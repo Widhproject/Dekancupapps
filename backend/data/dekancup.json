@@ -6579,7 +6579,11 @@
   "ticket_config": {
     "event_label": "Final Basket — Dekan Cup FST 2026",
     "venue": "",
-    "price": 15000
+    "package_prices": {
+      "1": 15000,
+      "3": 40000,
+      "5": 60000
+    }
   },
   "demo_seeded": true
 }

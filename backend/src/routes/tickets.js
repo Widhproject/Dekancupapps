@@ -44,11 +44,17 @@ function generateUniqueTicketCode() {
   return code;
 }
 
+// Jumlah orang per paket SENGAJA dikunci ke 3 pilihan ini (bukan bebas
+// berapa pun) — harga tiap paket tetap bisa diatur admin lewat PUT /config,
+// tapi jumlah tiernya sendiri tetap tiga supaya UI pemilihan paket di
+// halaman "/tiket" sederhana (3 kartu), bukan input angka bebas.
+const PACKAGE_TIERS = [1, 3, 5];
+
 function publicTicketConfig() {
   return {
     event_label: db.ticket_config.event_label,
     venue: db.ticket_config.venue,
-    price: db.ticket_config.price,
+    package_prices: db.ticket_config.package_prices,
     client_key: process.env.MIDTRANS_CLIENT_KEY || null,
     is_production: process.env.MIDTRANS_IS_PRODUCTION === 'true',
     configured: isMidtransConfigured(),
@@ -62,41 +68,60 @@ router.get('/config', (req, res) => {
   res.json(publicTicketConfig());
 });
 
-// PUT /api/tickets/config — admin, ubah harga/label/venue tanpa perlu deploy ulang.
+// PUT /api/tickets/config — admin, ubah label/venue/harga per paket tanpa
+// perlu deploy ulang. package_prices dikirim sebagai object { "1": angka,
+// "3": angka, "5": angka } — tiap key opsional, cuma yang dikirim yang diubah.
 router.put('/config', requireAuth, requireAdmin, (req, res) => {
-  const { event_label, venue, price } = req.body;
+  const { event_label, venue, package_prices } = req.body;
   if (event_label !== undefined) db.ticket_config.event_label = String(event_label).trim();
   if (venue !== undefined) db.ticket_config.venue = String(venue).trim();
-  if (price !== undefined) {
-    const p = Number(price);
-    if (!Number.isFinite(p) || p < 0) return res.status(400).json({ message: 'Harga tidak valid' });
-    db.ticket_config.price = Math.round(p);
+  if (package_prices && typeof package_prices === 'object') {
+    for (const tier of PACKAGE_TIERS) {
+      const raw = package_prices[tier] ?? package_prices[String(tier)];
+      if (raw === undefined) continue;
+      const p = Number(raw);
+      if (!Number.isFinite(p) || p < 0) {
+        return res.status(400).json({ message: `Harga paket ${tier} orang tidak valid` });
+      }
+      db.ticket_config.package_prices[tier] = Math.round(p);
+    }
   }
   save();
   res.json(publicTicketConfig());
 });
 
-// POST /api/tickets/checkout — publik. Bikin tiket berstatus 'pending' + transaksi Snap.
+// POST /api/tickets/checkout — publik. Satu transaksi Snap bisa mewakili
+// SATU paket (1/3/5 orang) — kalau quantity>1, dibikin N baris tiket
+// terpisah (masing-masing QR & kode sendiri-sendiri, karena tetap "1 tiket
+// = 1 orang" saat discan di pintu masuk) yang berbagi order_id yang sama,
+// supaya satu pembayaran bisa menghasilkan beberapa tiket sekaligus.
 router.post('/checkout', async (req, res) => {
-  const { buyer_name, buyer_phone } = req.body;
+  const { buyer_name, buyer_phone, quantity } = req.body;
   if (!buyer_name?.trim() || !buyer_phone?.trim()) {
     return res.status(400).json({ message: 'Nama dan nomor WhatsApp wajib diisi' });
+  }
+  const qty = Number(quantity) || 1;
+  if (!PACKAGE_TIERS.includes(qty)) {
+    return res.status(400).json({ message: `Paket tidak valid. Pilihan yang tersedia: ${PACKAGE_TIERS.join(', ')} orang` });
   }
   if (!isMidtransConfigured()) {
     return res.status(503).json({ message: 'Pembayaran belum dikonfigurasi oleh admin. Hubungi panitia.' });
   }
 
-  const amount = db.ticket_config.price;
+  const amount = db.ticket_config.package_prices[qty];
   const order_id = `TIX-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`;
-  const ticket_code = generateUniqueTicketCode();
 
-  const ticket = {
+  // Bikin `qty` baris tiket sekaligus, semuanya 'pending' dulu — baru
+  // di-update serentak jadi 'paid' oleh webhook kalau pembayarannya sukses.
+  const newTickets = Array.from({ length: qty }, () => ({
     id: uuid(),
     order_id,
-    ticket_code,
+    ticket_code: generateUniqueTicketCode(),
     buyer_name: buyer_name.trim(),
     buyer_phone: buyer_phone.trim(),
-    amount,
+    // amount per tiket = harga paket dibagi rata, cuma buat catatan/laporan;
+    // yang dipakai Midtrans tetap total paketnya (lihat gross_amount di bawah).
+    amount: Math.round(amount / qty),
     status: 'pending',
     payment_type: null,
     midtrans_transaction_id: null,
@@ -106,7 +131,7 @@ router.post('/checkout', async (req, res) => {
     created_at: nowStr(),
     updated_at: nowStr(),
     paid_at: null,
-  };
+  }));
 
   try {
     const snap = getSnapClient();
@@ -114,18 +139,18 @@ router.post('/checkout', async (req, res) => {
       transaction_details: { order_id, gross_amount: amount },
       customer_details: { first_name: buyer_name.trim(), phone: buyer_phone.trim() },
       item_details: [{
-        id: 'tiket-penonton',
+        id: `tiket-paket-${qty}`,
         price: amount,
         quantity: 1,
         // Nama item di Midtrans dibatasi 50 karakter.
-        name: (db.ticket_config.event_label || 'Tiket Masuk').slice(0, 50),
+        name: `Paket ${qty} Orang - ${db.ticket_config.event_label || 'Tiket Masuk'}`.slice(0, 50),
       }],
     });
 
-    db.tickets.push(ticket);
+    db.tickets.push(...newTickets);
     save();
 
-    res.status(201).json({ token: transaction.token, redirect_url: transaction.redirect_url, order_id, ticket_code });
+    res.status(201).json({ token: transaction.token, redirect_url: transaction.redirect_url, order_id, quantity: qty });
   } catch (err) {
     console.error('Gagal membuat transaksi Midtrans:', err.message);
     res.status(502).json({ message: 'Gagal menghubungi payment gateway. Coba lagi sebentar lagi.' });
@@ -152,10 +177,13 @@ router.post('/notification', async (req, res) => {
     return res.status(403).json({ message: 'Signature tidak valid' });
   }
 
-  const ticket = db.tickets.find((t) => t.order_id === order_id);
-  if (!ticket) return res.status(404).json({ message: 'Order tidak ditemukan' });
+  // Satu order_id bisa punya BEBERAPA tiket sekaligus (paket 3/5 orang) —
+  // semuanya dibayar dalam satu transaksi yang sama, jadi semuanya juga
+  // harus di-update status-nya bareng-bareng di sini.
+  const ticketsInOrder = db.tickets.filter((t) => t.order_id === order_id);
+  if (ticketsInOrder.length === 0) return res.status(404).json({ message: 'Order tidak ditemukan' });
 
-  let newStatus = ticket.status;
+  let newStatus = ticketsInOrder[0].status;
   if (transaction_status === 'capture') {
     newStatus = fraud_status === 'accept' ? 'paid' : 'pending';
   } else if (transaction_status === 'settlement') {
@@ -166,11 +194,13 @@ router.post('/notification', async (req, res) => {
     newStatus = 'pending';
   }
 
-  ticket.status = newStatus;
-  ticket.payment_type = payment_type || ticket.payment_type;
-  ticket.midtrans_transaction_id = transaction_id || ticket.midtrans_transaction_id;
-  ticket.updated_at = nowStr();
-  if (newStatus === 'paid' && !ticket.paid_at) ticket.paid_at = nowStr();
+  for (const ticket of ticketsInOrder) {
+    ticket.status = newStatus;
+    ticket.payment_type = payment_type || ticket.payment_type;
+    ticket.midtrans_transaction_id = transaction_id || ticket.midtrans_transaction_id;
+    ticket.updated_at = nowStr();
+    if (newStatus === 'paid' && !ticket.paid_at) ticket.paid_at = nowStr();
+  }
   save();
 
   req.app.get('io').emit('ticket_updated');
@@ -180,12 +210,38 @@ router.post('/notification', async (req, res) => {
 
 // GET /api/tickets/status/:order_id — publik, dipoll browser penonton setelah
 // nutup popup Snap, buat tahu apakah webhook di atas sudah kelar diproses.
+// Status cukup diwakili tiket pertama di order itu — semuanya SELALU sama
+// (lihat POST /notification, update-nya serentak buat seluruh order).
 router.get('/status/:order_id', (req, res) => {
-  const ticket = db.tickets.find((t) => t.order_id === req.params.order_id);
-  if (!ticket) return res.status(404).json({ message: 'Order tidak ditemukan' });
+  const ticketsInOrder = db.tickets.filter((t) => t.order_id === req.params.order_id);
+  if (ticketsInOrder.length === 0) return res.status(404).json({ message: 'Order tidak ditemukan' });
+  res.json({ status: ticketsInOrder[0].status, order_id: req.params.order_id, quantity: ticketsInOrder.length });
+});
+
+// GET /api/tickets/order/:order_id — publik, halaman "paket tiket" yang
+// menampilkan SEMUA tiket (QR masing-masing) dalam satu pembelian sekaligus.
+router.get('/order/:order_id', async (req, res) => {
+  const ticketsInOrder = db.tickets.filter((t) => t.order_id === req.params.order_id);
+  if (ticketsInOrder.length === 0) return res.status(404).json({ message: 'Order tidak ditemukan' });
+  if (ticketsInOrder[0].status !== 'paid') {
+    return res.status(403).json({ message: 'Pesanan ini belum lunas atau pembayarannya gagal', status: ticketsInOrder[0].status });
+  }
+
+  const tickets = await Promise.all(ticketsInOrder.map(async (t, i) => ({
+    ticket_code: t.ticket_code,
+    buyer_name: t.buyer_name,
+    seq: i + 1,
+    used: t.used,
+    used_at: t.used_at,
+    qr_data_url: await QRCode.toDataURL(t.ticket_code, { width: 480, margin: 2 }),
+  })));
+
   res.json({
-    status: ticket.status,
-    ticket_code: ticket.status === 'paid' ? ticket.ticket_code : undefined,
+    order_id: req.params.order_id,
+    event_label: db.ticket_config.event_label,
+    venue: db.ticket_config.venue,
+    quantity: tickets.length,
+    tickets,
   });
 });
 
